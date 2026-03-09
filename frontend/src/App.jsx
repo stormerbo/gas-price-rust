@@ -1,7 +1,7 @@
 import React from 'react';
 import { Layout, Menu } from 'antd';
 import { HomeOutlined, EnvironmentOutlined, BarChartOutlined } from '@ant-design/icons';
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import MapPage from './pages/MapPage';
 import ChartPage from './pages/ChartPage';
@@ -10,12 +10,17 @@ const { Header, Content } = Layout;
 
 function AppContent() {
   const location = useLocation();
+  const navigate = useNavigate();
   
   const menuItems = [
-    { key: '/', icon: <HomeOutlined />, label: <Link to="/">首页</Link> },
-    { key: '/map', icon: <EnvironmentOutlined />, label: <Link to="/map">油价地图</Link> },
-    { key: '/chart', icon: <BarChartOutlined />, label: <Link to="/chart">油价图表</Link> },
+    { key: '/', icon: <HomeOutlined />, label: '首页' },
+    { key: '/map', icon: <EnvironmentOutlined />, label: '油价地图' },
+    { key: '/chart', icon: <BarChartOutlined />, label: '油价图表' },
   ];
+
+  const handleMenuClick = (e) => {
+    navigate(e.key);
+  };
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -28,6 +33,7 @@ function AppContent() {
           mode="horizontal"
           selectedKeys={[location.pathname]}
           items={menuItems}
+          onClick={handleMenuClick}
           style={{ flex: 1, border: 'none' }}
         />
       </Header>

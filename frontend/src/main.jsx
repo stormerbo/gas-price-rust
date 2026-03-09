@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
+import 'dayjs/locale/zh-cn';
 import App from './App';
 import './index.css';
 
