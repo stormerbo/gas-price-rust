@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "description": "中国汽油价格管理系统",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "tauri": "tauri",
-    "dev": "tauri dev",
-    "build": "tauri build",
-    "build:web": "cargo build --release",
-    "run:web": "cargo run",
-    "run:desktop": "cargo run --bin gas-price-tauri"
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "backend": "cargo run",
+    "backend:release": "cargo run --release"
   },
   "keywords": [
     "gas-price",
@@ -19,6 +21,24 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@tauri-apps/cli": "^1.5.0"
-  }
+    "@tauri-apps/cli": "^1.5.0",
+    "@vitejs/plugin-react": "^5.1.4",
+    "vite": "^7.3.1"
+  },
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "@ant-design/plots": "^2.6.8",
+    "antd": "^6.3.1",
+    "axios": "^1.13.6",
+    "dayjs": "^1.11.19",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.1",
+    "semver": "^7.7.4"
+  },
+  "type": "commonjs"
 }
