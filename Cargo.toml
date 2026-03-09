@@ -1,0 +1,38 @@
+[package]
+name = "gas-price-tauri"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.11.0"
+actix-cors = "0.7.0"
+actix-files = "0.6.8"
+chrono = { version = "0.4.42", default-features = false, features = ["std", "clock"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+reqwest = { version = "0.12.24", default-features = false, features = ["rustls-tls", "http2", "charset"] }
+scraper = "0.24.0"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
+dirs = "5.0"
+regex = "1.11"
+tokio = { version = "1", features = ["full"] }
+tauri = { version = "1.8", features = [ "dialog-ask", "window-unminimize", "window-minimize", "window-maximize", "fs-remove-dir", "window-close", "window-hide", "notification-all", "dialog-save", "fs-read-file", "fs-create-dir", "fs-read-dir", "fs-rename-file", "dialog-confirm", "window-show", "dialog-message", "fs-copy-file", "fs-exists", "window-unmaximize", "dialog-open", "window-start-dragging", "fs-write-file", "fs-remove-file", "notification", "dialog", "path-all", "shell-open", "system-tray", "http-all"] }
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[lib]
+name = "gas_price_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gas-price-tauri"
+path = "src/tauri_main.rs"
+
+[[bin]]
+name = "gas-price-web"
+path = "src/main.rs"

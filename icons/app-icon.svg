@@ -1,0 +1,54 @@
+<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0071e3;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#005bb5;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="pumpGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e0e0e0;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded rectangle background -->
+  <rect width="1024" height="1024" rx="180" fill="url(#bgGradient)"/>
+  
+  <!-- Gas pump icon -->
+  <g transform="translate(312, 200)">
+    <!-- Pump body -->
+    <rect x="50" y="150" width="300" height="450" rx="20" fill="url(#pumpGradient)" stroke="#333" stroke-width="8"/>
+    
+    <!-- Display screen -->
+    <rect x="90" y="200" width="220" height="150" rx="10" fill="#1a1a1a"/>
+    
+    <!-- Price display -->
+    <text x="200" y="260" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#00ff00" text-anchor="middle">¥8.52</text>
+    <text x="200" y="310" font-family="Arial, sans-serif" font-size="32" fill="#00ff00" text-anchor="middle">92#</text>
+    
+    <!-- Nozzle holder -->
+    <rect x="320" y="250" width="80" height="200" rx="10" fill="#666"/>
+    
+    <!-- Hose -->
+    <path d="M 380 300 Q 450 280 480 320 L 480 400" stroke="#333" stroke-width="20" fill="none" stroke-linecap="round"/>
+    
+    <!-- Nozzle -->
+    <ellipse cx="480" cy="420" rx="25" ry="40" fill="#ff3b30"/>
+    <rect x="455" y="400" width="50" height="30" fill="#ff3b30"/>
+    
+    <!-- Buttons -->
+    <circle cx="120" cy="420" r="20" fill="#34c759"/>
+    <circle cx="200" cy="420" r="20" fill="#ff9500"/>
+    <circle cx="280" cy="420" r="20" fill="#ff3b30"/>
+    
+    <!-- Base -->
+    <rect x="30" y="600" width="340" height="50" rx="10" fill="#555"/>
+  </g>
+  
+  <!-- Chart icon overlay (small) -->
+  <g transform="translate(650, 700)">
+    <rect x="0" y="80" width="40" height="120" rx="5" fill="#34c759" opacity="0.9"/>
+    <rect x="50" y="40" width="40" height="160" rx="5" fill="#ff9500" opacity="0.9"/>
+    <rect x="100" y="100" width="40" height="100" rx="5" fill="#ff3b30" opacity="0.9"/>
+  </g>
+</svg>

@@ -1,0 +1,24 @@
+{
+  "name": "gas-price-app",
+  "version": "0.1.0",
+  "description": "中国汽油价格管理系统",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:web": "cargo build --release",
+    "run:web": "cargo run",
+    "run:desktop": "cargo run --bin gas-price-tauri"
+  },
+  "keywords": [
+    "gas-price",
+    "tauri",
+    "rust",
+    "desktop-app"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.0"
+  }
+}

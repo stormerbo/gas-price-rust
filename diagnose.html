@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>诊断页面</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f7;
+        }
+        h1 { color: #1d1d1f; }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .test-item {
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .warning { background: #fff3cd; color: #856404; }
+        button {
+            background: #0071e3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover { background: #0077ed; }
+        pre {
+            background: #f5f5f7;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 应用诊断工具</h1>
+    
+    <div class="test-section">
+        <h2>快速测试</h2>
+        <button onclick="runAllTests()">运行所有测试</button>
+        <button onclick="testAPI()">测试 API</button>
+        <button onclick="testLocation()">测试定位</button>
+        <button onclick="clearResults()">清除结果</button>
+    </div>
+
+    <div class="test-section">
+        <h2>测试结果</h2>
+        <div id="results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>控制台错误</h2>
+        <div id="console-errors"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>网络请求</h2>
+        <div id="network-log"></div>
+    </div>
+
+    <script>
+        const results = document.getElementById('results');
+        const consoleErrors = document.getElementById('console-errors');
+        const networkLog = document.getElementById('network-log');
+        
+        let errorCount = 0;
+        let networkRequests = [];
+
+        function addResult(title, type, message, details = '') {
+            const div = document.createElement('div');
+            div.className = `test-item ${type}`;
+            const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+            div.innerHTML = `
+                <strong>${icon} ${title}</strong><br>
+                ${message}
+                ${details ? `<pre>${details}</pre>` : ''}
+            `;
+            results.appendChild(div);
+        }
+
+        function clearResults() {
+            results.innerHTML = '';
+            consoleErrors.innerHTML = '<div class="test-item info">等待错误...</div>';
+            networkLog.innerHTML = '<div class="test-item info">等待网络请求...</div>';
+            errorCount = 0;
+            networkRequests = [];
+        }
+
+        // 捕获控制台错误
+        const originalError = console.error;
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            errorCount++;
+            const div = document.createElement('div');
+            div.className = 'test-item error';
+            div.innerHTML = `<strong>错误 #${errorCount}</strong><pre>${args.join(' ')}</pre>`;
+            consoleErrors.appendChild(div);
+        };
+
+        // 捕获未处理的错误
+        window.addEventListener('error', (e) => {
+            errorCount++;
+            const div = document.createElement('div');
+            div.className = 'test-item error';
+            div.innerHTML = `<strong>运行时错误 #${errorCount}</strong><pre>${e.message}\n${e.filename}:${e.lineno}</pre>`;
+            consoleErrors.appendChild(div);
+        });
+
+        // 捕获 Promise 错误
+        window.addEventListener('unhandledrejection', (e) => {
+            errorCount++;
+            const div = document.createElement('div');
+            div.className = 'test-item error';
+            div.innerHTML = `<strong>Promise 错误 #${errorCount}</strong><pre>${e.reason}</pre>`;
+            consoleErrors.appendChild(div);
+        });
+
+        // 捕获 CSP 违规
+        document.addEventListener('securitypolicyviolation', (e) => {
+            errorCount++;
+            const div = document.createElement('div');
+            div.className = 'test-item error';
+            div.innerHTML = `
+                <strong>CSP 违规 #${errorCount}</strong>
+                <pre>指令: ${e.violatedDirective}
+URI: ${e.blockedURI}
+原始策略: ${e.originalPolicy}</pre>
+            `;
+            consoleErrors.appendChild(div);
+        });
+
+        // 拦截 fetch 请求
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const url = args[0];
+            const startTime = Date.now();
+            
+            return originalFetch.apply(this, args).then(response => {
+                const duration = Date.now() - startTime;
+                networkRequests.push({
+                    url,
+                    status: response.status,
+                    ok: response.ok,
+                    duration
+                });
+                
+                const div = document.createElement('div');
+                div.className = `test-item ${response.ok ? 'success' : 'error'}`;
+                div.innerHTML = `
+                    <strong>${response.ok ? '✅' : '❌'} ${response.status}</strong> ${url}
+                    <br><small>耗时: ${duration}ms</small>
+                `;
+                networkLog.appendChild(div);
+                
+                return response;
+            }).catch(error => {
+                const duration = Date.now() - startTime;
+                networkRequests.push({
+                    url,
+                    error: error.message,
+                    duration
+                });
+                
+                const div = document.createElement('div');
+                div.className = 'test-item error';
+                div.innerHTML = `
+                    <strong>❌ 失败</strong> ${url}
+                    <br>${error.message}
+                    <br><small>耗时: ${duration}ms</small>
+                `;
+                networkLog.appendChild(div);
+                
+                throw error;
+            });
+        };
+
+        async function testAPI() {
+            addResult('API 测试', 'info', '开始测试...');
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8080/api/v1/gas-prices/history?page=0&size=1');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addResult(
+                        'API 连接',
+                        'success',
+                        `成功获取数据，共 ${data.totalElements} 条记录`,
+                        JSON.stringify(data, null, 2)
+                    );
+                } else {
+                    addResult('API 连接', 'error', `状态码: ${response.status}`);
+                }
+            } catch (error) {
+                addResult('API 连接', 'error', error.message);
+            }
+        }
+
+        async function testLocation() {
+            addResult('定位测试', 'info', '开始测试...');
+            
+            try {
+                // 使用 ip-api.com 替代 ipapi.co
+                const response = await fetch('http://ip-api.com/json/?lang=zh-CN');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    addResult(
+                        '定位服务',
+                        'success',
+                        `位置: ${data.city}, ${data.regionName}, ${data.country}`,
+                        JSON.stringify(data, null, 2)
+                    );
+                } else {
+                    addResult('定位服务', 'error', `定位失败: ${data.message || '未知错误'}`);
+                }
+            } catch (error) {
+                addResult('定位服务', 'error', error.message);
+            }
+        }
+
+        async function runAllTests() {
+            clearResults();
+            
+            // 测试 1: 基本环境
+            addResult('环境检查', 'success', 'JavaScript 运行正常');
+            
+            // 测试 2: LocalStorage
+            try {
+                localStorage.setItem('test', 'value');
+                localStorage.removeItem('test');
+                addResult('LocalStorage', 'success', '可以读写');
+            } catch (e) {
+                addResult('LocalStorage', 'error', e.message);
+            }
+            
+            // 测试 3: API
+            await testAPI();
+            
+            // 测试 4: 定位
+            await testLocation();
+            
+            // 测试 5: 静态资源
+            try {
+                const response = await fetch('/style.css');
+                if (response.ok) {
+                    addResult('静态资源', 'success', 'CSS 文件加载成功');
+                } else {
+                    addResult('静态资源', 'error', `CSS 加载失败: ${response.status}`);
+                }
+            } catch (e) {
+                addResult('静态资源', 'error', e.message);
+            }
+            
+            // 测试 6: 模块加载
+            try {
+                const module = await import('/js/utils.js');
+                addResult('ES 模块', 'success', '模块加载成功');
+            } catch (e) {
+                addResult('ES 模块', 'error', e.message);
+            }
+            
+            addResult('测试完成', 'info', `共发现 ${errorCount} 个错误`);
+        }
+
+        // 页面加载时自动运行测试
+        window.addEventListener('DOMContentLoaded', () => {
+            addResult('页面加载', 'success', 'DOM 加载完成');
+            setTimeout(runAllTests, 500);
+        });
+    </script>
+</body>
+</html>

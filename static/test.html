@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSP 测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-item {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            background: #f5f5f7;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>🔍 CSP 和功能测试</h1>
+    
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+        
+        function addResult(title, success, message) {
+            const div = document.createElement('div');
+            div.className = `test-item ${success ? 'success' : 'error'}`;
+            div.innerHTML = `
+                <strong>${success ? '✅' : '❌'} ${title}</strong><br>
+                ${message}
+            `;
+            results.appendChild(div);
+        }
+
+        // 测试 1: 基本 JavaScript
+        try {
+            const test = 'Hello';
+            addResult('基本 JavaScript', true, '内联脚本可以执行');
+        } catch (e) {
+            addResult('基本 JavaScript', false, e.message);
+        }
+
+        // 测试 2: Fetch API
+        fetch('http://127.0.0.1:8080/api/v1/gas-prices/history?page=0&size=1')
+            .then(response => {
+                if (response.ok) {
+                    addResult('API 连接', true, `状态码: ${response.status}`);
+                    return response.json();
+                } else {
+                    addResult('API 连接', false, `状态码: ${response.status}`);
+                }
+            })
+            .then(data => {
+                if (data) {
+                    addResult('API 数据', true, `获取到 ${data.totalElements || 0} 条记录`);
+                }
+            })
+            .catch(error => {
+                addResult('API 连接', false, error.message);
+            });
+
+        // 测试 3: LocalStorage
+        try {
+            localStorage.setItem('test', 'value');
+            const value = localStorage.getItem('test');
+            localStorage.removeItem('test');
+            addResult('LocalStorage', true, '可以读写');
+        } catch (e) {
+            addResult('LocalStorage', false, e.message);
+        }
+
+        // 测试 4: 动态创建元素
+        try {
+            const div = document.createElement('div');
+            div.textContent = 'Test';
+            addResult('DOM 操作', true, '可以创建和操作元素');
+        } catch (e) {
+            addResult('DOM 操作', false, e.message);
+        }
+
+        // 测试 5: 检查控制台错误
+        window.addEventListener('error', (e) => {
+            addResult('运行时错误', false, e.message);
+        });
+
+        // 测试 6: 检查 CSP 违规
+        document.addEventListener('securitypolicyviolation', (e) => {
+            addResult('CSP 违规', false, `${e.violatedDirective}: ${e.blockedURI}`);
+        });
+    </script>
+</body>
+</html>

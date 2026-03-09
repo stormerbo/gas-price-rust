@@ -1,0 +1,76 @@
+name: Manual Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: '选择构建平台'
+        required: true
+        type: choice
+        options:
+          - both
+          - macos
+          - windows
+
+jobs:
+  build-macos:
+    if: ${{ github.event.inputs.platform == 'both' || github.event.inputs.platform == 'macos' }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli
+
+      - name: Build macOS app
+        run: cargo tauri build
+
+      - name: List build artifacts
+        run: |
+          echo "=== macOS Build Artifacts ==="
+          ls -lh target/release/bundle/macos/
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: target/release/bundle/macos/*.dmg
+          retention-days: 7
+
+  build-windows:
+    if: ${{ github.event.inputs.platform == 'both' || github.event.inputs.platform == 'windows' }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli
+
+      - name: Build Windows app
+        run: cargo tauri build
+
+      - name: List build artifacts
+        run: |
+          echo "=== Windows Build Artifacts ==="
+          dir target\release\bundle\msi\
+
+      - name: Upload Windows MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: target/release/bundle/msi/*.msi
+          retention-days: 7

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>中国油价地图 - 中国汽油价格管理</title>
+    <link rel="stylesheet" href="/style.css?v=20260226apple" />
+    <link rel="stylesheet" href="/map.css?v=20260226apple" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-a"></div>
+    <div class="bg-shape bg-shape-b"></div>
+
+    <nav class="main-nav">
+      <div class="nav-container">
+        <div class="nav-links">
+          <a href="/" class="nav-link">首页</a>
+          <a href="/map.html" class="nav-link active">油价地图</a>
+          <a href="/chart.html" class="nav-link">油价图表</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="layout">
+      <header class="hero card reveal">
+        <h1>中国油价地图</h1>
+        <p>点击地图上的省份查看该地区的油价信息</p>
+      </header>
+
+      <section id="province-data" class="card reveal delay-1">
+        <div class="local-prices-header">
+          <h2 id="province-name">当前位置油价</h2>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="update-time" class="update-time">加载中...</span>
+            <button id="refresh-location-btn" class="btn" style="min-height: 32px; padding: 0 12px; font-size: 13px;" title="重新定位">
+              🔄
+            </button>
+          </div>
+        </div>
+
+        <div id="local-prices-grid" class="local-prices-grid">
+          <!-- 油价卡片将通过JavaScript动态生成 -->
+        </div>
+      </section>
+
+      <div class="map-container card reveal delay-2">
+        <div class="map-wrapper">
+          <div id="china-map" style="width: 100%; height: 700px;"></div>
+        </div>
+        
+        <div class="map-legend">
+          <h3>使用说明</h3>
+          <div class="legend-items">
+            <div class="legend-item">
+              <span class="legend-icon">🖱️</span>
+              <span>点击省份查看油价</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-icon">🔍</span>
+              <span>鼠标悬停查看省名</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-icon">📊</span>
+              <span>颜色深浅表示价格高低</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p id="toast" class="toast"></p>
+    </main>
+
+    <script type="module" src="/map-new.js?v=20260226component"></script>
+  </body>
+</html>
