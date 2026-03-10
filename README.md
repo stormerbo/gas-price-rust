@@ -8,12 +8,6 @@
 
 当前仓库为 **Rust + Tauri** 版本，提供成熟稳定的桌面应用与 Web 服务实现。
 
-## 📚 文档
-
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - 技术架构和设计文档
-- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - 故障排除指南
-- **[docs/](./docs/)** - 更多文档和归档资料
-
 ## ✨ 特性
 
 - 🌐 Web 应用模式：传统的浏览器访问
@@ -53,13 +47,6 @@
 - **macOS**: `target/release/bundle/macos/` 和 `target/release/bundle/dmg/`
 - **Windows**: `target/release/bundle/msi/`
 - **Linux**: `target/release/bundle/deb/` 和 `target/release/bundle/appimage/`
-
-## 📖 详细文档
-
-- [项目架构文档](ARCHITECTURE.md) - 技术架构和设计模式
-- [故障排除指南](TROUBLESHOOTING.md) - 常见问题解决方案
-- [文档索引](docs/README.md) - 完整文档列表
-- [归档文档](docs/archived/) - 专题指南（Windows 构建、Docker、图标修复等）
 
 ## 🛠️ 技术栈
 
