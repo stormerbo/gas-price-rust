@@ -22,21 +22,21 @@
 ### 桌面应用（开发）
 
 ```bash
-# 终端 1：启动后端服务（提供 Web API + 静态资源）
-cargo run
-# 或 npm run backend
+# 终端 1：启动前端开发服务器
+npm install
+npm run dev
 
 # 终端 2：启动 Tauri 桌面应用
-npm install
 npm run tauri:dev
 ```
 
 ### Web 应用
 
 ```bash
-# 启动 Web 服务器
-cargo run
-# 或 npm run backend
+# 构建前端并启动 Web 服务器
+npm install
+npm run build
+cargo run --bin gas-price-web
 ```
 
 访问: http://127.0.0.1:8080
@@ -66,7 +66,8 @@ npm run tauri:build
 - **HTML 解析**: scraper
 
 ### 前端
-- **语言**: JavaScript (ES6 Modules)
+- **语言**: React
+- **UI**: Ant Design
 - **图表库**: Chart.js 4.4.1、ECharts 5.4.3
 - **样式**: 原生 CSS (Apple Design 风格)
 - **地图**: 高德地图 API

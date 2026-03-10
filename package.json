@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "中国汽油价格管理系统",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
@@ -18,9 +21,17 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@tauri-apps/cli": "^1.5.0"
+    "@vitejs/plugin-react": "^5.1.4",
+    "vite": "^7.3.1"
   },
-  "main": "index.js",
-  "dependencies": {},
-  "type": "commonjs"
+  "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "antd": "^6.3.1",
+    "chart.js": "^4.4.1",
+    "dayjs": "^1.11.19",
+    "echarts": "^5.4.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "type": "module"
 }

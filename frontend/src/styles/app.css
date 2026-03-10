@@ -197,6 +197,9 @@ body::after {
   align-items: center;
   padding: 6px 14px;
   border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  cursor: pointer;
   text-decoration: none;
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
