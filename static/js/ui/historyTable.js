@@ -8,6 +8,8 @@ const state = {
   size: 20,
   totalPages: 0,
   lastQuery: null,
+  sortBy: null,   // 'pricePerLiter' | 'priceChange' | null
+  sortDir: 'desc', // 'asc' | 'desc'
 };
 
 /**
@@ -48,11 +50,36 @@ function renderRows(content) {
 }
 
 /**
+ * 更新表头排序图标
+ */
+function updateSortHeaders() {
+  document.querySelectorAll("th[data-sort]").forEach(th => {
+    const col = th.dataset.sort;
+    const icon = th.querySelector(".sort-icon");
+    if (!icon) return;
+    if (col === state.sortBy) {
+      icon.textContent = state.sortDir === 'asc' ? ' ↑' : ' ↓';
+    } else {
+      icon.textContent = ' ↕';
+    }
+  });
+}
+
+/**
  * 获取并显示历史记录
  */
 async function loadHistory() {
   if (!state.lastQuery) {
     return;
+  }
+
+  // 注入排序参数
+  if (state.sortBy) {
+    state.lastQuery.set("sortBy", state.sortBy);
+    state.lastQuery.set("sortDir", state.sortDir);
+  } else {
+    state.lastQuery.delete("sortBy");
+    state.lastQuery.delete("sortDir");
   }
 
   const pageInfo = document.getElementById("page-info");
@@ -144,6 +171,24 @@ export function initHistoryTable() {
   const nextBtn = document.getElementById("next-page");
 
   if (!searchForm || !bodyEl) return;
+
+  // 表头排序点击
+  document.querySelectorAll("th[data-sort]").forEach(th => {
+    th.style.cursor = "pointer";
+    th.addEventListener("click", async () => {
+      const col = th.dataset.sort;
+      if (state.sortBy === col) {
+        state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        state.sortBy = col;
+        state.sortDir = 'desc';
+      }
+      state.page = 0;
+      if (state.lastQuery) state.lastQuery.set("page", "0");
+      updateSortHeaders();
+      await loadHistory();
+    });
+  });
 
   // 搜索表单提交
   searchForm.addEventListener("submit", async (e) => {

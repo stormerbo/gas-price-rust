@@ -3,14 +3,14 @@
 /**
  * 显示Toast提示
  */
-export function showToast(message, isError = false) {
+export function showToast(message, isError = false, duration = 3500) {
   const toast = document.getElementById("toast");
   if (!toast) return;
   
   toast.textContent = message;
   toast.style.background = isError ? "#8c1c13" : "#0f1720";
   toast.classList.add("show");
-  window.setTimeout(() => toast.classList.remove("show"), 2200);
+  window.setTimeout(() => toast.classList.remove("show"), duration);
 }
 
 /**

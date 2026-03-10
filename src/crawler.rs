@@ -5,116 +5,96 @@ use crate::models::{CrawlItem, CrawlResponse, FuelType};
 use chrono::{Datelike, Local, NaiveDate};
 use regex::Regex;
 use reqwest::Client;
-use scraper::{Html, Selector};
 use sqlx::SqlitePool;
 use std::env;
 use std::time::Duration;
 
 const BASE_URL: &str = "https://www.qiyoujiage.com";
 
+// 省份名称与 URL slug 的映射（主页无省份链接列表，硬编码）
+const PROVINCES: &[(&str, &str)] = &[
+    ("北京", "beijing"),
+    ("天津", "tianjin"),
+    ("河北", "hebei"),
+    ("山西", "shanxi"),
+    ("内蒙古", "neimenggu"),
+    ("辽宁", "liaoning"),
+    ("吉林", "jilin"),
+    ("黑龙江", "heilongjiang"),
+    ("上海", "shanghai"),
+    ("江苏", "jiangsu"),
+    ("浙江", "zhejiang"),
+    ("安徽", "anhui"),
+    ("福建", "fujian"),
+    ("江西", "jiangxi"),
+    ("山东", "shandong"),
+    ("河南", "henan"),
+    ("湖北", "hubei"),
+    ("湖南", "hunan"),
+    ("广东", "guangdong"),
+    ("广西", "guangxi"),
+    ("海南", "hainan"),
+    ("重庆", "chongqing"),
+    ("四川", "sichuan"),
+    ("贵州", "guizhou"),
+    ("云南", "yunnan"),
+    ("西藏", "xizang"),
+    ("陕西", "shanxi-3"),
+    ("甘肃", "gansu"),
+    ("青海", "qinghai"),
+    ("宁夏", "ningxia"),
+    ("新疆", "xinjiang"),
+];
+
 /// 构建HTTP客户端
 pub fn build_http_client() -> Result<Client, ApiError> {
     Client::builder()
         .timeout(Duration::from_secs(30))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        .danger_accept_invalid_certs(true) // 接受无效证书（目标网站证书有问题）
+        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .default_headers({
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8".parse().unwrap());
+            headers.insert("Accept-Language", "zh-CN,zh;q=0.9".parse().unwrap());
+            headers
+        })
+        .danger_accept_invalid_certs(true)
         .build()
         .map_err(|e| internal_error(&format!("创建HTTP客户端失败: {}", e)))
 }
 
-/// 解析省份链接
-pub async fn parse_province_links(client: &Client) -> Result<Vec<(String, String)>, ApiError> {
-    let resp = client.get(BASE_URL).send().await?;
-    let html = resp.text().await?;
-    let document = Html::parse_document(&html);
-
-    // 尝试多个选择器
-    let selectors = vec![
-        "div.list_main a",
-        "a[href*='.shtml']",
-        "body a",
-    ];
-
-    let mut links = Vec::new();
-    
-    for selector_str in selectors {
-        if let Ok(selector) = Selector::parse(selector_str) {
-            for element in document.select(&selector) {
-                if let Some(href) = element.value().attr("href") {
-                    let province = element.text().collect::<String>().trim().to_string();
-                    
-                    // 过滤无效链接
-                    if province.is_empty() 
-                        || province.contains("查询") 
-                        || province.contains("国内")
-                        || province.contains("加油站")
-                        || province.len() > 10 {
-                        continue;
-                    }
-                    
-                    // 过滤深圳
-                    if province.contains("深圳") {
-                        continue;
-                    }
-                    
-                    // 只保留省份链接（包含.shtml的）
-                    if !href.contains(".shtml") {
-                        continue;
-                    }
-                    
-                    let url = if href.starts_with("http") {
-                        href.to_string()
-                    } else {
-                        format!("{}{}", BASE_URL, href)
-                    };
-                    
-                    // 避免重复
-                    if !links.iter().any(|(p, _)| p == &province) {
-                        links.push((province, url));
-                    }
-                }
-            }
-            
-            // 如果找到了足够的链接，就停止尝试其他选择器
-            if links.len() >= 30 {
-                break;
-            }
-        }
-    }
-
-    if links.is_empty() {
-        return Err(bad_request("未找到省份链接"));
-    }
-
+/// 获取省份列表（直接从硬编码常量生成 URL）
+pub async fn parse_province_links(_client: &Client) -> Result<Vec<(String, String)>, ApiError> {
+    let links = PROVINCES
+        .iter()
+        .map(|(name, slug)| {
+            (
+                name.to_string(),
+                format!("{}/{}.shtml", BASE_URL, slug),
+            )
+        })
+        .collect();
     Ok(links)
 }
 
-/// 解析油价调整日期
-pub fn parse_adjustment_date(text: &str) -> Option<NaiveDate> {
-    let re = Regex::new(r"油价(\d{1,2})月(\d{1,2})日调整").ok()?;
-    
-    if let Some(caps) = re.captures(text) {
+/// 解析油价调整日期（从 HTML 中提取，格式如"3月9日24时调整"）
+pub fn parse_adjustment_date(html: &str) -> Option<NaiveDate> {
+    // 匹配 "3月9日24时调整" 或 "3月9日调整"
+    let re = Regex::new(r"(\d{1,2})月(\d{1,2})日(?:\d+时)?调整").ok()?;
+
+    if let Some(caps) = re.captures(html) {
         let month: u32 = caps.get(1)?.as_str().parse().ok()?;
         let day: u32 = caps.get(2)?.as_str().parse().ok()?;
-        
+
         let now = Local::now();
-        let current_year = now.year();
-        let current_month = now.month();
-        
-        // 如果月份大于当前月份，说明是去年的日期
-        let year = if month > current_month {
-            current_year - 1
-        } else {
-            current_year
-        };
-        
+        let year = if month > now.month() { now.year() - 1 } else { now.year() };
+
         NaiveDate::from_ymd_opt(year, month, day)
     } else {
         None
     }
 }
 
-/// 解析单个省份的油价
+/// 解析单个省份的油价（解析 HTML 中的 <dt>/<dd> 结构）
 pub async fn parse_province_prices(
     client: &Client,
     province: &str,
@@ -123,44 +103,30 @@ pub async fn parse_province_prices(
 ) -> Result<Vec<CrawlItem>, ApiError> {
     let resp = client.get(url).send().await?;
     let html = resp.text().await?;
-    let document = Html::parse_document(&html);
+
+    // 匹配 <dt>广东92#汽油</dt>\n<dd>7.66</dd>
+    let re = Regex::new(r"<dt>[^<]*?(92#汽油|95#汽油|98#汽油|0#柴油)</dt>\s*<dd>([\d.]+)</dd>").unwrap();
 
     let mut items = Vec::new();
-    let selector = Selector::parse("div.news_main table tbody tr").unwrap();
-
-    for (idx, row) in document.select(&selector).enumerate() {
-        if idx == 0 {
-            continue; // 跳过表头
-        }
-
-        let cells: Vec<String> = row
-            .select(&Selector::parse("td").unwrap())
-            .map(|cell| cell.text().collect::<String>().trim().to_string())
-            .collect();
-
-        if cells.len() < 2 {
-            continue;
-        }
-
-        let fuel_name = &cells[0];
-        let price_str = &cells[1];
-
-        let fuel_type = match fuel_name.as_str() {
-            name if name.contains("92") => FuelType::Gasoline92,
-            name if name.contains("95") => FuelType::Gasoline95,
-            name if name.contains("98") => FuelType::Gasoline98,
-            name if name.contains("0") && name.contains("柴") => FuelType::Diesel0,
+    for caps in re.captures_iter(&html) {
+        let fuel_label = &caps[1];
+        let price: f64 = match caps[2].parse() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let fuel_type = match fuel_label {
+            "92#汽油" => FuelType::Gasoline92,
+            "95#汽油" => FuelType::Gasoline95,
+            "98#汽油" => FuelType::Gasoline98,
+            "0#柴油"  => FuelType::Diesel0,
             _ => continue,
         };
-
-        if let Ok(price) = price_str.parse::<f64>() {
-            items.push(CrawlItem {
-                province: province.to_string(),
-                fuel_type,
-                price_per_liter: price,
-                effective_date,
-            });
-        }
+        items.push(CrawlItem {
+            province: province.to_string(),
+            fuel_type,
+            price_per_liter: price,
+            effective_date,
+        });
     }
 
     Ok(items)
@@ -295,10 +261,20 @@ pub fn start_auto_crawler(pool: SqlitePool) {
             }
         };
 
-        // 服务启动时立即执行一次爬取
+        // 服务启动时立即执行一次爬取，从网站解析实际调整日期
         println!("[crawler] starting initial crawl on service startup...");
-        let today = Local::now().date_naive();
-        match run_crawl_job(&pool, &client, None, today, false).await {
+        let effective_date = match client.get(BASE_URL).send().await {
+            Ok(resp) => match resp.text().await {
+                Ok(text) => parse_adjustment_date(&text).unwrap_or_else(|| {
+                    println!("[crawler] failed to parse adjustment date, using today");
+                    Local::now().date_naive()
+                }),
+                Err(_) => Local::now().date_naive(),
+            },
+            Err(_) => Local::now().date_naive(),
+        };
+        println!("[crawler] effective date: {}", effective_date);
+        match run_crawl_job(&pool, &client, None, effective_date, false).await {
             Ok(summary) => {
                 println!(
                     "[crawler] initial crawl success at {}: provinces={}, records={}, created={}, updated={}",
@@ -345,9 +321,15 @@ pub fn start_auto_crawler(pool: SqlitePool) {
             // 等待到上午8点
             actix_web::rt::time::sleep(duration_until_8am).await;
             
-            // 执行爬取
-            let today = Local::now().date_naive();
-            match run_crawl_job(&pool, &client, None, today, false).await {
+            // 执行爬取，从网站解析实际调整日期
+            let effective_date = match client.get(BASE_URL).send().await {
+                Ok(resp) => match resp.text().await {
+                    Ok(text) => parse_adjustment_date(&text).unwrap_or_else(|| Local::now().date_naive()),
+                    Err(_) => Local::now().date_naive(),
+                },
+                Err(_) => Local::now().date_naive(),
+            };
+            match run_crawl_job(&pool, &client, None, effective_date, false).await {
                 Ok(summary) => {
                     println!(
                         "[crawler] success at {}: provinces={}, records={}, created={}, updated={}",

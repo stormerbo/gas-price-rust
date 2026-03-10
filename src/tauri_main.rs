@@ -16,21 +16,10 @@ use tauri::{
 };
 use tokio::sync::Mutex;
 
-// 显示错误对话框
-fn show_error_dialog(title: &str, message: &str) {
-    use std::process::Command;
-    
-    // 使用 osascript 显示 macOS 原生对话框
-    let script = format!(
-        r#"display dialog "{}" with title "{}" buttons {{"确定"}} default button "确定" with icon stop"#,
-        message.replace("\"", "\\\"").replace("\n", "\\n"),
-        title.replace("\"", "\\\"")
-    );
-    
-    let _ = Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .output();
+// 显示错误信息并退出
+fn fatal_error(title: &str, message: &str) -> ! {
+    eprintln!("❌ {}: {}", title, message);
+    std::process::exit(1);
 }
 
 // Tauri 命令：获取数据库路径
@@ -64,20 +53,8 @@ fn main() {
                 path
             }
             Err(e) => {
-                eprintln!("❌ 获取数据库路径失败:");
-                eprintln!("{}", e);
-                eprintln!("\n💡 可能的解决方案:");
-                eprintln!("1. 检查用户主目录是否可访问");
-                eprintln!("2. 检查磁盘空间是否充足");
-                eprintln!("3. 检查文件系统权限");
-                
-                // 显示错误对话框
-                show_error_dialog(
-                    "数据库初始化失败",
-                    &format!("无法创建数据库目录:\n\n{}\n\n请检查文件系统权限和磁盘空间。", e)
-                );
-                
-                std::process::exit(1);
+                eprintln!("❌ 获取数据库路径失败: {}", e);
+                fatal_error("数据库初始化失败", &format!("无法创建数据库目录: {}", e));
             }
         };
 
@@ -87,21 +64,7 @@ fn main() {
                 pool
             }
             Err(e) => {
-                eprintln!("❌ 数据库初始化失败:");
-                eprintln!("{}", e.message);
-                eprintln!("\n💡 可能的解决方案:");
-                eprintln!("1. 删除旧的数据库文件: {}", database_url);
-                eprintln!("2. 检查文件权限");
-                eprintln!("3. 检查磁盘空间");
-                
-                // 显示错误对话框
-                show_error_dialog(
-                    "数据库初始化失败",
-                    &format!("无法初始化数据库:\n\n{}\n\n数据库位置: {}\n\n请尝试删除旧的数据库文件或检查权限。", 
-                        e.message, database_url)
-                );
-                
-                std::process::exit(1);
+                fatal_error("数据库初始化失败", &format!("无法初始化数据库: {} (路径: {})", e.message, database_url));
             }
         }
     });

@@ -38,7 +38,10 @@
       </section>
 
       <section class="card reveal delay-2">
-        <h2>历史查询</h2>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <h2 style="margin: 0;">历史查询</h2>
+          <button id="crawl-btn" type="button" class="btn primary">爬取最新油价</button>
+        </div>
         <form id="search-form" class="grid-form">
           <label>
             省份（可选）
@@ -73,8 +76,8 @@
                 <th>省份</th>
                 <th>油品</th>
                 <th>调整日期</th>
-                <th>单价(元/L)</th>
-                <th>价格变动</th>
+                <th data-sort="pricePerLiter">单价(元/L)<span class="sort-icon"> ↕</span></th>
+                <th data-sort="priceChange">价格变动<span class="sort-icon"> ↕</span></th>
                 <th>操作</th>
               </tr>
             </thead>

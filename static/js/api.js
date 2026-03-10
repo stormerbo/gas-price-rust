@@ -65,9 +65,28 @@ export async function fetchLatestPrice(province, fuelType) {
 }
 
 /**
- * 获取指定省份所有油品类型的最新油价
+ * 触发爬虫爬取最新油价
  */
-export async function fetchLatestPricesByProvince(province, fuelTypes) {
-  const promises = fuelTypes.map(fuelType => fetchLatestPrice(province, fuelType));
-  return Promise.all(promises);
+export async function triggerCrawl() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000); // 2分钟超时
+
+  try {
+    const resp = await fetch(`${API_BASE}/crawl`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      signal: controller.signal,
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(data.message || "爬取失败");
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
 }

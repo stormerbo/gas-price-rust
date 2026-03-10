@@ -13,18 +13,18 @@
 - 使用 Tauri 框架构建桌面应用
 - 完整的功能和文档
 
-### 2. Go + Fyne 版本（`gas-price-go/` 目录）
+### 2. Go + Wails 版本（`../gas-price-wails/` 目录）
 - 新的 Go 语言实现
-- 使用 Fyne 框架构建原生 GUI
+- 使用 Wails 承载 Web UI，体验与原 Web 版一致
 - **主要优势**：
-  - ⚡ 更快的构建速度（Windows 构建 < 2 分钟 vs Rust 版本 10+ 分钟）
-  - 🎯 更简单的依赖（无需 WebView2）
+  - ⚡ 更快的构建速度
+  - 🎯 依赖更轻量，保持 Web 前端能力
   - 🚀 更容易的跨平台编译
   - 📦 单一可执行文件
 
-**两个版本可以并存**，它们共享相同的数据库文件（`~/.gas_price/data/gas_prices.db`），但请不要同时运行以避免数据库锁冲突。
+**两个版本可以并存**。默认数据库位置不同，如需共享数据请通过配置将两者指向同一个 DB 文件，并避免同时运行以防数据库锁冲突。
 
-详见 [gas-price-go/README.md](./gas-price-go/README.md) 了解 Go 版本的使用方法。
+详见 [../gas-price-wails/README.md](../gas-price-wails/README.md) 了解 Go 版本的使用方法。
 
 ## 📚 文档
 

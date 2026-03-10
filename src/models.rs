@@ -36,6 +36,8 @@ pub struct HistoryQuery {
     pub page: usize,
     #[serde(default = "default_size")]
     pub size: usize,
+    pub sort_by: Option<String>,
+    pub sort_dir: Option<String>,
 }
 
 fn default_size() -> usize {

@@ -59,7 +59,22 @@ pub async fn history(
     let total_elements = total as usize;
     let total_pages = (total_elements + query.size - 1) / query.size;
 
-    sql.push_str(" ORDER BY effective_date DESC, id DESC");
+    sql.push_str(" ORDER BY ");
+    let sort_col = match query.sort_by.as_deref() {
+        Some("pricePerLiter") => "price_per_liter",
+        Some("priceChange") => "price_change",
+        _ => "effective_date",
+    };
+    let sort_dir = match query.sort_dir.as_deref() {
+        Some("asc") => "ASC",
+        _ => "DESC",
+    };
+    // 主排序列 + 次排序保证稳定
+    if sort_col == "effective_date" {
+        sql.push_str(&format!("{} {}, id DESC", sort_col, sort_dir));
+    } else {
+        sql.push_str(&format!("{} {}, effective_date DESC, id DESC", sort_col, sort_dir));
+    }
     sql.push_str(&format!(" LIMIT {} OFFSET {}", query.size, query.page * query.size));
 
     let rows = sqlx::query(&sql).fetch_all(&data.db).await?;
