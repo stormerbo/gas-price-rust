@@ -220,7 +220,7 @@ export default function HomePage() {
       <section className="card reveal delay-2">
         <div className="section-header">
           <h2>历史记录</h2>
-          <Button className="btn" onClick={handleCrawl} loading={loading}>
+          <Button className="btn primary" onClick={handleCrawl} loading={loading}>
             爬取最新油价
           </Button>
         </div>
