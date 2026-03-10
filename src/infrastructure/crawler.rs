@@ -11,7 +11,11 @@ use sqlx::SqlitePool;
 use std::env;
 use std::time::Duration;
 
-const BASE_URL: &str = "https://www.qiyoujiage.com";
+const BASE_URL: &str = "http://www.qiyoujiage.com";
+
+pub fn base_url() -> &'static str {
+    BASE_URL
+}
 
 // 省份名称与 URL slug 的映射（主页无省份链接列表，硬编码）
 const PROVINCES: &[(&str, &str)] = &[

@@ -1,7 +1,9 @@
 // API处理器模块
 use crate::common::error::{bad_request, not_found, ApiError};
 use crate::domain::models::*;
-use crate::infrastructure::crawler::{build_http_client, parse_adjustment_date, run_crawl_job};
+use crate::infrastructure::crawler::{
+    base_url, build_http_client, parse_adjustment_date, run_crawl_job,
+};
 use crate::infrastructure::db::{row_to_record, AppState};
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
 use chrono::{Local, NaiveDate};
@@ -227,7 +229,7 @@ pub async fn crawl(
         }
         _ => {
             // 尝试从网站解析调整日期
-            let resp = client.get("https://www.qiyoujiage.com").send().await?;
+            let resp = client.get(base_url()).send().await?;
             let html = resp.text().await?;
             parse_adjustment_date(&html).unwrap_or_else(|| Local::now().date_naive())
         }

@@ -123,6 +123,8 @@ cargo run
 
 - `AUTO_CRAWLER_ENABLED`: 是否启用自动爬虫（默认: true）
 - `AUTO_CRAWLER_INTERVAL_MINUTES`: 自动爬虫执行间隔（分钟，默认: 720）
+- `WEB_HOST`: Web 服务绑定地址（默认: 127.0.0.1）
+- `WEB_PORT`: Web 服务绑定端口（默认: 8080，未设置时自动尝试 8080-8090）
 
 ## 数据库位置
 
