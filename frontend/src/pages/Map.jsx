@@ -173,8 +173,16 @@ export default function MapPage() {
       echarts.registerMap('china', geoJson);
 
       chart.setOption({
+        backgroundColor: 'transparent',
         tooltip: {
           trigger: 'item',
+          backgroundColor: 'rgba(17, 24, 39, 0.92)',
+          borderWidth: 0,
+          padding: [12, 14],
+          textStyle: {
+            color: '#f8fafc',
+            fontSize: 12,
+          },
           formatter: (params) => {
             const dbName = provinceNameMapping[params.name];
             if (!dbName) return `<strong>${params.name}</strong><br/>暂无油价数据`;
@@ -187,26 +195,53 @@ export default function MapPage() {
               const price = record ? record.pricePerLiter.toFixed(3) : '-';
               return `${FUEL_TYPE_NAMES[fuel]}: ${price}`;
             });
-            return `<strong>${params.name}</strong><br/>${lines.join('<br/>')}`;
+            return `<div style="font-weight:600;margin-bottom:6px;">${params.name}</div>${lines.join(
+              '<br/>'
+            )}`;
           },
         },
         visualMap: {
-          min: 6,
-          max: 10,
-          left: 'left',
-          top: 'bottom',
+          min: 6.5,
+          max: 9.5,
+          left: 20,
+          bottom: 24,
           text: ['高', '低'],
+          textStyle: {
+            color: '#475569',
+            fontSize: 12,
+          },
+          itemWidth: 10,
+          itemHeight: 120,
+          calculable: true,
           inRange: {
-            color: ['#dbeafe', '#2563eb'],
+            color: ['#e2f2ff', '#8cc8ff', '#2f7af8', '#0b4fd6'],
           },
         },
+        toolbox: { show: false },
         series: [
           {
             name: '92号汽油',
             type: 'map',
             map: 'china',
             data: mapData,
-            emphasis: { label: { show: false } },
+            label: { show: false },
+            itemStyle: {
+              areaColor: '#f2f4f7',
+              borderColor: '#cbd5e1',
+              borderWidth: 1,
+              shadowColor: 'rgba(15, 23, 42, 0.12)',
+              shadowBlur: 8,
+            },
+            emphasis: {
+              label: { show: false },
+              itemStyle: {
+                areaColor: '#ffe08a',
+                borderColor: '#f59e0b',
+                borderWidth: 1.2,
+                shadowColor: 'rgba(245, 158, 11, 0.35)',
+                shadowBlur: 12,
+              },
+            },
           },
         ],
       });
