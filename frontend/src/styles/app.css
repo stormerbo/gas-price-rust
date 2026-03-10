@@ -258,6 +258,36 @@ body::after {
   box-shadow: var(--shadow-md);
 }
 
+/* Section header + filters layout */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.section-header h2 {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.filters-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-md);
+}
+
+.filters-row .filters {
+  flex: 1 1 520px;
+}
+
 /* ========================================
    Hero Section
    ======================================== */

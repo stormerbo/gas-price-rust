@@ -220,12 +220,10 @@ export default function HomePage() {
       <section className="card reveal delay-2">
         <div className="section-header">
           <h2>历史记录</h2>
-          <Button className="btn primary" onClick={handleCrawl} loading={loading}>
-            爬取最新油价
-          </Button>
         </div>
 
-        <Form layout="inline" form={form} className="filters" onFinish={handleSearch}>
+        <div className="filters-row">
+          <Form layout="inline" form={form} className="filters" onFinish={handleSearch}>
           <Form.Item name="province" label="省份">
             <Select
               placeholder="全部省份"
@@ -250,7 +248,12 @@ export default function HomePage() {
               查询
             </Button>
           </Form.Item>
-        </Form>
+          </Form>
+
+          <Button className="btn primary" onClick={handleCrawl} loading={loading}>
+            爬取最新油价
+          </Button>
+        </div>
 
         <Table
           rowKey="id"
