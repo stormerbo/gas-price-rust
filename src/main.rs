@@ -1,19 +1,18 @@
 // 主入口文件 - Web服务器模式
+use actix_cors::Cors;
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
-use actix_cors::Cors;
 use gas_price_lib::{
-    AppState, configure_routes, get_database_path, init_database, seed_database, start_auto_crawler,
+    configure_routes, get_database_path, init_database, seed_database, start_auto_crawler, AppState,
 };
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("🚀 启动中国汽油价格管理系统 (Web服务器模式)");
-    println!("💡 提示: 如需桌面应用，请使用 'cargo run --bin gas-price-tauri'");
-    
-    let database_url = get_database_path()
-        .expect("Failed to determine database path");
-    
+    println!("💡 提示: 如需桌面应用，请使用 'cargo run --bin gas-price'");
+
+    let database_url = get_database_path().expect("Failed to determine database path");
+
     let pool = init_database(&database_url)
         .await
         .expect("Failed to initialize database");
@@ -24,9 +23,7 @@ async fn main() -> std::io::Result<()> {
 
     println!("✅ 数据库初始化完成: {}", database_url);
 
-    let state = web::Data::new(AppState {
-        db: pool.clone(),
-    });
+    let state = web::Data::new(AppState { db: pool.clone() });
 
     start_auto_crawler(pool);
 
@@ -42,7 +39,7 @@ async fn main() -> std::io::Result<()> {
             .allow_any_method()
             .allow_any_header()
             .max_age(3600);
-        
+
         App::new()
             .wrap(cors)
             .app_data(state.clone())

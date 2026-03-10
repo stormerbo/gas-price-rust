@@ -1,11 +1,12 @@
 // API 调用模块
-import { API_BASE } from './constants.js';
+import { getApiBase } from './constants.js';
 
 /**
  * 获取油价历史记录
  */
 export async function fetchHistory(query) {
-  const resp = await fetch(`${API_BASE}/history?${query.toString()}`);
+  const base = await getApiBase();
+  const resp = await fetch(`${base}/history?${query.toString()}`);
   const data = await resp.json();
 
   if (!resp.ok) {
@@ -19,7 +20,8 @@ export async function fetchHistory(query) {
  * 删除油价记录
  */
 export async function deleteRecord(id) {
-  const resp = await fetch(`${API_BASE}/${id}`, { method: "DELETE" });
+  const base = await getApiBase();
+  const resp = await fetch(`${base}/${id}`, { method: "DELETE" });
   
   if (!resp.ok) {
     const err = await resp.json();
@@ -33,7 +35,8 @@ export async function deleteRecord(id) {
  * 更新油价记录
  */
 export async function updateRecord(id, payload) {
-  const resp = await fetch(`${API_BASE}/${id}`, {
+  const base = await getApiBase();
+  const resp = await fetch(`${base}/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -52,8 +55,9 @@ export async function updateRecord(id, payload) {
  * 获取指定省份和油品类型的最新油价
  */
 export async function fetchLatestPrice(province, fuelType) {
+  const base = await getApiBase();
   const resp = await fetch(
-    `${API_BASE}/history?province=${encodeURIComponent(province)}&fuelType=${fuelType}&page=0&size=1`
+    `${base}/history?province=${encodeURIComponent(province)}&fuelType=${fuelType}&page=0&size=1`
   );
   const data = await resp.json();
   
@@ -68,11 +72,12 @@ export async function fetchLatestPrice(province, fuelType) {
  * 触发爬虫爬取最新油价
  */
 export async function triggerCrawl() {
+  const base = await getApiBase();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 120_000); // 2分钟超时
 
   try {
-    const resp = await fetch(`${API_BASE}/crawl`, {
+    const resp = await fetch(`${base}/crawl`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),

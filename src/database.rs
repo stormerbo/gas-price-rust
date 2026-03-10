@@ -1,7 +1,8 @@
 // 数据库操作模块
 use crate::error::{internal_error, ApiError};
 use crate::models::{CrawlItem, FuelType, GasPriceRecord};
-use sqlx::{Row, SqlitePool};
+use sqlx::{Executor, Row, Sqlite, SqlitePool};
+use std::collections::HashMap;
 
 /// 应用状态（共享数据库连接池）
 pub struct AppState {
@@ -12,7 +13,7 @@ pub struct AppState {
 pub fn get_database_path() -> Result<String, String> {
     let home_dir = dirs::home_dir().ok_or("无法获取用户主目录")?;
     let data_dir = home_dir.join(".gas_price").join("data");
-    
+
     // 尝试创建目录，提供更详细的错误信息
     if let Err(e) = std::fs::create_dir_all(&data_dir) {
         return Err(format!(
@@ -21,9 +22,9 @@ pub fn get_database_path() -> Result<String, String> {
             data_dir.display()
         ));
     }
-    
+
     let db_path = data_dir.join("gas_prices.db");
-    
+
     // 验证目录是否可写
     let test_file = data_dir.join(".write_test");
     if let Err(e) = std::fs::write(&test_file, "test") {
@@ -34,7 +35,7 @@ pub fn get_database_path() -> Result<String, String> {
         ));
     }
     let _ = std::fs::remove_file(&test_file);
-    
+
     // 返回 SQLite URL 格式，而不是纯文件路径
     Ok(format!("sqlite://{}?mode=rwc", db_path.to_string_lossy()))
 }
@@ -88,56 +89,9 @@ pub async fn seed_database(pool: &SqlitePool) -> Result<bool, ApiError> {
     Ok(count == 0)
 }
 
-/// 查询最新的油价记录（用于计算价格变化）
-pub async fn get_latest_price(
-    pool: &SqlitePool,
-    province: &str,
-    fuel_type: &str,
-) -> Result<Option<f64>, ApiError> {
-    let result = sqlx::query(
-        r#"
-        SELECT price_per_liter 
-        FROM gas_prices 
-        WHERE province = ? AND fuel_type = ?
-        ORDER BY effective_date DESC, id DESC
-        LIMIT 1
-        "#,
-    )
-    .bind(province)
-    .bind(fuel_type)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(result.map(|row| row.get::<f64, _>("price_per_liter")))
-}
-
-/// 检查当天是否已有记录
-pub async fn get_today_record(
-    pool: &SqlitePool,
-    province: &str,
-    fuel_type: &str,
-    effective_date: &str,
-) -> Result<Option<u64>, ApiError> {
-    let result = sqlx::query(
-        r#"
-        SELECT id 
-        FROM gas_prices 
-        WHERE province = ? AND fuel_type = ? AND effective_date = ?
-        LIMIT 1
-        "#,
-    )
-    .bind(province)
-    .bind(fuel_type)
-    .bind(effective_date)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(result.map(|row| row.get::<i64, _>("id") as u64))
-}
-
 /// 插入新的油价记录
-pub async fn insert_price_record(
-    pool: &SqlitePool,
+pub async fn insert_price_record<'a>(
+    executor: impl Executor<'a, Database = Sqlite>,
     item: &CrawlItem,
     price_change: Option<f64>,
 ) -> Result<(), ApiError> {
@@ -152,15 +106,15 @@ pub async fn insert_price_record(
     .bind(item.price_per_liter)
     .bind(item.effective_date.to_string())
     .bind(price_change)
-    .execute(pool)
+    .execute(executor)
     .await?;
 
     Ok(())
 }
 
 /// 更新现有的油价记录
-pub async fn update_price_record(
-    pool: &SqlitePool,
+pub async fn update_price_record<'a>(
+    executor: impl Executor<'a, Database = Sqlite>,
     id: u64,
     item: &CrawlItem,
     price_change: Option<f64>,
@@ -175,22 +129,78 @@ pub async fn update_price_record(
     .bind(item.price_per_liter)
     .bind(price_change)
     .bind(id as i64)
-    .execute(pool)
+    .execute(executor)
     .await?;
 
     Ok(())
 }
 
+/// 批量加载最新价格（按省份+油品）
+pub async fn load_latest_prices(
+    pool: &SqlitePool,
+) -> Result<HashMap<(String, String), f64>, ApiError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT province, fuel_type, price_per_liter
+        FROM (
+            SELECT
+                province,
+                fuel_type,
+                price_per_liter,
+                ROW_NUMBER() OVER (
+                    PARTITION BY province, fuel_type
+                    ORDER BY effective_date DESC, id DESC
+                ) AS rn
+            FROM gas_prices
+        )
+        WHERE rn = 1
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut map = HashMap::with_capacity(rows.len());
+    for row in rows {
+        let province: String = row.try_get("province")?;
+        let fuel_type: String = row.try_get("fuel_type")?;
+        let price: f64 = row.try_get("price_per_liter")?;
+        map.insert((province, fuel_type), price);
+    }
+
+    Ok(map)
+}
+
+/// 加载指定生效日期的已有记录（用于判断更新/插入）
+pub async fn load_records_on_date(
+    pool: &SqlitePool,
+    effective_date: &str,
+) -> Result<HashMap<(String, String), u64>, ApiError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT id, province, fuel_type
+        FROM gas_prices
+        WHERE effective_date = ?
+        "#,
+    )
+    .bind(effective_date)
+    .fetch_all(pool)
+    .await?;
+
+    let mut map = HashMap::with_capacity(rows.len());
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        let province: String = row.try_get("province")?;
+        let fuel_type: String = row.try_get("fuel_type")?;
+        map.insert((province, fuel_type), id as u64);
+    }
+
+    Ok(map)
+}
+
 /// 将数据库行转换为GasPriceRecord
 pub fn row_to_record(row: &sqlx::sqlite::SqliteRow) -> Result<GasPriceRecord, sqlx::Error> {
     let fuel_type_str: String = row.try_get("fuel_type")?;
-    let fuel_type = match fuel_type_str.as_str() {
-        "GASOLINE_92" => FuelType::Gasoline92,
-        "GASOLINE_95" => FuelType::Gasoline95,
-        "GASOLINE_98" => FuelType::Gasoline98,
-        "DIESEL_0" => FuelType::Diesel0,
-        _ => FuelType::Gasoline92,
-    };
+    let fuel_type = FuelType::from_str(&fuel_type_str).unwrap_or(FuelType::Gasoline92);
 
     Ok(GasPriceRecord {
         id: row.try_get::<i64, _>("id")? as u64,

@@ -14,7 +14,7 @@ reqwest = { version = "0.12.24", default-features = false, features = ["rustls-t
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
 dirs = "5.0"
 regex = "1.11"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 tauri = { version = "1.8", features = [ "window-unminimize", "window-minimize", "window-maximize", "window-close", "window-hide", "window-show", "window-unmaximize", "window-start-dragging", "shell-open", "system-tray"] }
 
 [build-dependencies]

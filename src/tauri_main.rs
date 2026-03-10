@@ -4,17 +4,33 @@
     windows_subsystem = "windows"
 )]
 
+use actix_cors::Cors;
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
-use actix_cors::Cors;
 use gas_price_lib::{
-    AppState, configure_routes, get_database_path, init_database, seed_database, start_auto_crawler,
+    configure_routes, get_database_path, init_database, seed_database, start_auto_crawler, AppState,
 };
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, AtomicU16, Ordering},
+    Arc,
+};
 use tauri::{
     CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
 };
-use tokio::sync::Mutex;
+
+struct ServerState {
+    port: AtomicU16,
+    ready: AtomicBool,
+}
+
+impl ServerState {
+    fn new() -> Self {
+        Self {
+            port: AtomicU16::new(0),
+            ready: AtomicBool::new(false),
+        }
+    }
+}
 
 // 显示错误信息并退出
 fn fatal_error(title: &str, message: &str) -> ! {
@@ -28,17 +44,20 @@ async fn get_db_path() -> Result<String, String> {
     get_database_path().map_err(|e| e.to_string())
 }
 
-// Tauri 命令：触发手动爬取
-#[tauri::command]
-async fn trigger_crawl(_state: tauri::State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
-    // 这里可以调用爬虫逻辑
-    Ok("爬取任务已触发".to_string())
-}
-
 // Tauri 命令：获取应用版本
 #[tauri::command]
 fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+// Tauri 命令：获取后端服务端口
+#[tauri::command]
+fn get_server_port(state: tauri::State<'_, Arc<ServerState>>) -> Result<u16, String> {
+    if state.ready.load(Ordering::SeqCst) {
+        Ok(state.port.load(Ordering::SeqCst))
+    } else {
+        Err("backend server not ready".to_string())
+    }
 }
 
 fn main() {
@@ -64,7 +83,10 @@ fn main() {
                 pool
             }
             Err(e) => {
-                fatal_error("数据库初始化失败", &format!("无法初始化数据库: {} (路径: {})", e.message, database_url));
+                fatal_error(
+                    "数据库初始化失败",
+                    &format!("无法初始化数据库: {} (路径: {})", e.message, database_url),
+                );
             }
         }
     });
@@ -79,23 +101,19 @@ fn main() {
         }
     });
 
-    let app_state = Arc::new(Mutex::new(AppState {
-        db: pool.clone(),
-    }));
-
     // 在后台启动 HTTP 服务器
     let pool_clone = pool.clone();
-    let server_ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let server_ready_clone = server_ready.clone();
-    let server_port = Arc::new(std::sync::atomic::AtomicU16::new(8080));
-    let server_port_clone = server_port.clone();
-    
+    let server_state = Arc::new(ServerState::new());
+    let server_state_clone = server_state.clone();
+
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             println!("🚀 Starting backend HTTP server...");
-            
-            let state = web::Data::new(AppState { db: pool_clone.clone() });
+
+            let state = web::Data::new(AppState {
+                db: pool_clone.clone(),
+            });
             start_auto_crawler(pool_clone);
 
             // 确定 static 目录路径
@@ -114,9 +132,15 @@ fn main() {
 
             println!("📁 Static files path: {}", static_path);
 
-            // 尝试绑定端口，如果失败则尝试其他端口
-            let mut port = 8080;
-            let server = loop {
+            // 尝试绑定端口，开发模式固定 8080，生产模式尝试 8080-8090
+            let port_range = if cfg!(debug_assertions) {
+                8080..=8080
+            } else {
+                8080..=8090
+            };
+            let mut server = None;
+
+            for port in port_range {
                 match HttpServer::new({
                     let static_path = static_path.clone();
                     let state = state.clone();
@@ -126,7 +150,7 @@ fn main() {
                             .allow_any_method()
                             .allow_any_header()
                             .max_age(3600);
-                        
+
                         App::new()
                             .wrap(cors)
                             .app_data(state.clone())
@@ -134,22 +158,26 @@ fn main() {
                             .service(Files::new("/", static_path.clone()).index_file("index.html"))
                     }
                 })
-                .bind(("127.0.0.1", port)) {
-                    Ok(server) => {
+                .bind(("127.0.0.1", port))
+                {
+                    Ok(bound_server) => {
                         println!("✅ Backend server bound to port {}", port);
-                        server_port_clone.store(port, std::sync::atomic::Ordering::SeqCst);
-                        server_ready_clone.store(true, std::sync::atomic::Ordering::SeqCst);
-                        break server;
+                        server_state_clone.port.store(port, Ordering::SeqCst);
+                        server_state_clone.ready.store(true, Ordering::SeqCst);
+                        server = Some(bound_server);
+                        break;
                     }
                     Err(e) => {
-                        if port < 8090 {
-                            println!("⚠️  Port {} unavailable, trying {}...", port, port + 1);
-                            port += 1;
-                        } else {
-                            eprintln!("❌ Failed to bind server after trying ports 8080-8090: {}", e);
-                            return;
-                        }
+                        eprintln!("⚠️  Port {} unavailable: {}", port, e);
                     }
+                }
+            }
+
+            let server = match server {
+                Some(server) => server,
+                None => {
+                    eprintln!("❌ Failed to bind backend server");
+                    return;
                 }
             };
 
@@ -162,8 +190,8 @@ fn main() {
     // 等待服务器启动（最多等待10秒）
     println!("⏳ Waiting for backend server to start...");
     for i in 0..100 {
-        if server_ready.load(std::sync::atomic::Ordering::SeqCst) {
-            let port = server_port.load(std::sync::atomic::Ordering::SeqCst);
+        if server_state.ready.load(Ordering::SeqCst) {
+            let port = server_state.port.load(Ordering::SeqCst);
             println!("✅ Backend server is ready on port {}!", port);
             break;
         }
@@ -192,7 +220,7 @@ fn main() {
 
     // 构建 Tauri 应用
     tauri::Builder::default()
-        .manage(app_state)
+        .manage(server_state)
         .system_tray(system_tray)
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::LeftClick {
@@ -230,8 +258,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_db_path,
-            trigger_crawl,
-            get_app_version
+            get_app_version,
+            get_server_port
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

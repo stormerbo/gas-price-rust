@@ -9,11 +9,13 @@ static/js/
 ├── utils.js                # 工具函数（日期处理、格式化等）
 ├── api.js                  # API调用封装
 ├── location.js             # 位置定位服务
+├── tauriFetch.js            # Tauri 环境下的 fetch 适配
 ├── ui/
 │   ├── provinceSelect.js   # 省份选择器UI
 │   ├── datePicker.js       # 日期选择器UI
-│   ├── localPrices.js      # 本地油价展示UI
 │   └── historyTable.js     # 历史记录表格UI
+├── components/
+│   └── localPricesWidget.js # 本地油价组件
 └── README.md               # 本文档
 ```
 
@@ -24,7 +26,7 @@ static/js/
 
 ### constants.js
 定义应用中使用的常量：
-- `API_BASE`: API基础路径
+- `getApiBase()`: 动态获取 API 基础路径（Tauri 环境自动探测端口）
 - `PROVINCES`: 省份列表
 - `PROVINCE_EN_TO_CN`: 英文省份名到中文的映射
 - `FUEL_TYPE_NAMES`: 油品类型名称映射
@@ -44,7 +46,6 @@ API调用封装：
 - `deleteRecord()`: 删除记录
 - `updateRecord()`: 更新记录
 - `fetchLatestPrice()`: 获取最新油价
-- `fetchLatestPricesByProvince()`: 获取省份所有油品最新油价
 
 ### location.js
 位置定位服务：
@@ -61,10 +62,9 @@ API调用封装：
 - `initDatePickers()`: 初始化日期选择器
 - 包含完整的日历UI和交互逻辑
 
-### ui/localPrices.js
-本地油价展示UI组件：
-- `displayLocalPrices()`: 展示指定省份的油价
-- `loadLocalPrices()`: 自动检测并加载本地油价
+### components/localPricesWidget.js
+本地油价组件：
+- `initLocalPricesWidget()`: 初始化并渲染本地油价卡片
 
 ### ui/historyTable.js
 历史记录表格UI组件：

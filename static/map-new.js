@@ -1,11 +1,12 @@
 // 导入本地油价组件
 import { initLocalPricesWidget } from './js/components/localPricesWidget.js';
-import { API_BASE } from './js/constants.js';
+import { getApiBase } from './js/constants.js';
 
 const toast = document.getElementById("toast");
 
 let myChart = null;
 let allProvincePrices = {};
+const apiBasePromise = getApiBase();
 
 function showToast(message, isError = false) {
   toast.textContent = message;
@@ -366,7 +367,8 @@ async function loadAllProvincePrices() {
         size: "200",
       });
 
-      const resp = await fetch(`${API_BASE}/history?${query.toString()}`);
+      const base = await apiBasePromise;
+      const resp = await fetch(`${base}/history?${query.toString()}`);
       const data = await resp.json();
 
       if (resp.ok && data.content && data.content.length > 0) {
@@ -443,7 +445,8 @@ async function loadProvinceDataForMap(echartsProvinceName) {
       size: "50",
     });
 
-    const resp = await fetch(`${API_BASE}/history?${query.toString()}`);
+    const base = await apiBasePromise;
+    const resp = await fetch(`${base}/history?${query.toString()}`);
     const data = await resp.json();
 
     if (!resp.ok) {

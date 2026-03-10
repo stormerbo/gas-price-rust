@@ -1,5 +1,7 @@
 // 爬虫模块
-use crate::database::{get_latest_price, get_today_record, insert_price_record, update_price_record};
+use crate::database::{
+    insert_price_record, load_latest_prices, load_records_on_date, update_price_record,
+};
 use crate::error::{bad_request, internal_error, ApiError};
 use crate::models::{CrawlItem, CrawlResponse, FuelType};
 use chrono::{Datelike, Local, NaiveDate};
@@ -57,7 +59,6 @@ pub fn build_http_client() -> Result<Client, ApiError> {
             headers.insert("Accept-Language", "zh-CN,zh;q=0.9".parse().unwrap());
             headers
         })
-        .danger_accept_invalid_certs(true)
         .build()
         .map_err(|e| internal_error(&format!("创建HTTP客户端失败: {}", e)))
 }
@@ -66,12 +67,7 @@ pub fn build_http_client() -> Result<Client, ApiError> {
 pub async fn parse_province_links(_client: &Client) -> Result<Vec<(String, String)>, ApiError> {
     let links = PROVINCES
         .iter()
-        .map(|(name, slug)| {
-            (
-                name.to_string(),
-                format!("{}/{}.shtml", BASE_URL, slug),
-            )
-        })
+        .map(|(name, slug)| (name.to_string(), format!("{}/{}.shtml", BASE_URL, slug)))
         .collect();
     Ok(links)
 }
@@ -86,11 +82,26 @@ pub fn parse_adjustment_date(html: &str) -> Option<NaiveDate> {
         let day: u32 = caps.get(2)?.as_str().parse().ok()?;
 
         let now = Local::now();
-        let year = if month > now.month() { now.year() - 1 } else { now.year() };
+        let year = if month > now.month() {
+            now.year() - 1
+        } else {
+            now.year()
+        };
 
         NaiveDate::from_ymd_opt(year, month, day)
     } else {
         None
+    }
+}
+
+/// 从网站获取实际调整日期，失败则回退到当天
+async fn fetch_effective_date(client: &Client) -> NaiveDate {
+    match client.get(BASE_URL).send().await {
+        Ok(resp) => match resp.text().await {
+            Ok(text) => parse_adjustment_date(&text).unwrap_or_else(|| Local::now().date_naive()),
+            Err(_) => Local::now().date_naive(),
+        },
+        Err(_) => Local::now().date_naive(),
     }
 }
 
@@ -105,7 +116,8 @@ pub async fn parse_province_prices(
     let html = resp.text().await?;
 
     // 匹配 <dt>广东92#汽油</dt>\n<dd>7.66</dd>
-    let re = Regex::new(r"<dt>[^<]*?(92#汽油|95#汽油|98#汽油|0#柴油)</dt>\s*<dd>([\d.]+)</dd>").unwrap();
+    let re =
+        Regex::new(r"<dt>[^<]*?(92#汽油|95#汽油|98#汽油|0#柴油)</dt>\s*<dd>([\d.]+)</dd>").unwrap();
 
     let mut items = Vec::new();
     for caps in re.captures_iter(&html) {
@@ -118,7 +130,7 @@ pub async fn parse_province_prices(
             "92#汽油" => FuelType::Gasoline92,
             "95#汽油" => FuelType::Gasoline95,
             "98#汽油" => FuelType::Gasoline98,
-            "0#柴油"  => FuelType::Diesel0,
+            "0#柴油" => FuelType::Diesel0,
             _ => continue,
         };
         items.push(CrawlItem {
@@ -141,13 +153,23 @@ pub async fn apply_crawl_items(
     let mut created = 0;
     let mut updated = 0;
 
+    if items.is_empty() {
+        return Ok((created, updated));
+    }
+
+    let latest_prices = load_latest_prices(pool).await?;
+    let effective_date = items[0].effective_date.to_string();
+    let existing_records = load_records_on_date(pool, &effective_date).await?;
+
+    let mut tx = if dry_run {
+        None
+    } else {
+        Some(pool.begin().await?)
+    };
+
     for item in items {
-        let latest_price = get_latest_price(
-            pool,
-            &item.province,
-            item.fuel_type.as_str(),
-        )
-        .await?;
+        let key = (item.province.clone(), item.fuel_type.as_str().to_string());
+        let latest_price = latest_prices.get(&key).copied();
 
         // 计算价格变化
         let price_change = latest_price.map(|old_price| item.price_per_liter - old_price);
@@ -159,27 +181,30 @@ pub async fn apply_crawl_items(
             }
         }
 
+        let existing_id = existing_records.get(&key).copied();
+
         if dry_run {
-            created += 1;
+            if existing_id.is_some() {
+                updated += 1;
+            } else {
+                created += 1;
+            }
             continue;
         }
 
-        // 检查当天是否已有记录
-        let existing_id = get_today_record(
-            pool,
-            &item.province,
-            item.fuel_type.as_str(),
-            &item.effective_date.to_string(),
-        )
-        .await?;
-
         if let Some(id) = existing_id {
-            update_price_record(pool, id, &item, price_change).await?;
+            let tx = tx.as_mut().unwrap();
+            update_price_record(tx.as_mut(), id, &item, price_change).await?;
             updated += 1;
         } else {
-            insert_price_record(pool, &item, price_change).await?;
+            let tx = tx.as_mut().unwrap();
+            insert_price_record(tx.as_mut(), &item, price_change).await?;
             created += 1;
         }
+    }
+
+    if let Some(tx) = tx {
+        tx.commit().await?;
     }
 
     Ok((created, updated))
@@ -242,12 +267,25 @@ pub fn env_bool(name: &str, default: bool) -> bool {
         .unwrap_or(default)
 }
 
+pub fn env_u64(name: &str, default: u64) -> u64 {
+    env::var(name)
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(default)
+}
+
 /// 启动自动爬虫
 pub fn start_auto_crawler(pool: SqlitePool) {
     let enabled = env_bool("AUTO_CRAWLER_ENABLED", true);
+    let interval_minutes = env_u64("AUTO_CRAWLER_INTERVAL_MINUTES", 720);
 
     if !enabled {
         println!("[crawler] auto crawler disabled");
+        return;
+    }
+
+    if interval_minutes == 0 {
+        println!("[crawler] invalid interval, auto crawler disabled");
         return;
     }
 
@@ -263,16 +301,7 @@ pub fn start_auto_crawler(pool: SqlitePool) {
 
         // 服务启动时立即执行一次爬取，从网站解析实际调整日期
         println!("[crawler] starting initial crawl on service startup...");
-        let effective_date = match client.get(BASE_URL).send().await {
-            Ok(resp) => match resp.text().await {
-                Ok(text) => parse_adjustment_date(&text).unwrap_or_else(|| {
-                    println!("[crawler] failed to parse adjustment date, using today");
-                    Local::now().date_naive()
-                }),
-                Err(_) => Local::now().date_naive(),
-            },
-            Err(_) => Local::now().date_naive(),
-        };
+        let effective_date = fetch_effective_date(&client).await;
         println!("[crawler] effective date: {}", effective_date);
         match run_crawl_job(&pool, &client, None, effective_date, false).await {
             Ok(summary) => {
@@ -286,49 +315,23 @@ pub fn start_auto_crawler(pool: SqlitePool) {
                 );
             }
             Err(err) => {
-                eprintln!("[crawler] initial crawl failed at {}: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), err);
+                eprintln!(
+                    "[crawler] initial crawl failed at {}: {}",
+                    Local::now().format("%Y-%m-%d %H:%M:%S"),
+                    err
+                );
             }
         }
 
         loop {
-            // 计算距离下一个上午8点的时间
-            let now = Local::now();
-            let today_8am = now
-                .date_naive()
-                .and_hms_opt(8, 0, 0)
-                .unwrap()
-                .and_local_timezone(Local)
-                .unwrap();
-            
-            let next_8am = if now < today_8am {
-                today_8am
-            } else {
-                (now.date_naive() + chrono::Days::new(1))
-                    .and_hms_opt(8, 0, 0)
-                    .unwrap()
-                    .and_local_timezone(Local)
-                    .unwrap()
-            };
-            
-            let duration_until_8am = (next_8am - now).to_std().unwrap_or(Duration::from_secs(0));
-            
             println!(
-                "[crawler] next scheduled crawl at: {} (in {} hours)",
-                next_8am.format("%Y-%m-%d %H:%M:%S"),
-                duration_until_8am.as_secs() / 3600
+                "[crawler] next scheduled crawl in {} minutes",
+                interval_minutes
             );
-            
-            // 等待到上午8点
-            actix_web::rt::time::sleep(duration_until_8am).await;
-            
-            // 执行爬取，从网站解析实际调整日期
-            let effective_date = match client.get(BASE_URL).send().await {
-                Ok(resp) => match resp.text().await {
-                    Ok(text) => parse_adjustment_date(&text).unwrap_or_else(|| Local::now().date_naive()),
-                    Err(_) => Local::now().date_naive(),
-                },
-                Err(_) => Local::now().date_naive(),
-            };
+
+            tokio::time::sleep(Duration::from_secs(interval_minutes * 60)).await;
+
+            let effective_date = fetch_effective_date(&client).await;
             match run_crawl_job(&pool, &client, None, effective_date, false).await {
                 Ok(summary) => {
                     println!(
@@ -341,7 +344,11 @@ pub fn start_auto_crawler(pool: SqlitePool) {
                     );
                 }
                 Err(err) => {
-                    eprintln!("[crawler] failed at {}: {}", Local::now().format("%Y-%m-%d %H:%M:%S"), err);
+                    eprintln!(
+                        "[crawler] failed at {}: {}",
+                        Local::now().format("%Y-%m-%d %H:%M:%S"),
+                        err
+                    );
                 }
             }
         }

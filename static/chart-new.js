@@ -1,12 +1,13 @@
 // 导入本地油价组件
 import { initLocalPricesWidget } from './js/components/localPricesWidget.js';
-import { API_BASE } from './js/constants.js';
+import { getApiBase } from './js/constants.js';
 
 const toast = document.getElementById("toast");
 const canvas = document.getElementById("priceChart");
 
 let chartInstance = null;
 let currentFuelType = "GASOLINE_92"; // 当前选中的油品类型
+const apiBasePromise = getApiBase();
 
 const FUEL_TYPE_NAMES = {
   GASOLINE_92: "92号汽油",
@@ -35,7 +36,8 @@ async function fetchLatestPrices(fuelType) {
   let totalPages = 1;
   
   while (page < totalPages) {
-    const resp = await fetch(`${API_BASE}/history?fuelType=${fuelType}&page=${page}&size=200`);
+    const base = await apiBasePromise;
+    const resp = await fetch(`${base}/history?fuelType=${fuelType}&page=${page}&size=200`);
     const data = await resp.json();
 
     if (!resp.ok) {

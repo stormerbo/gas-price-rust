@@ -106,4 +106,14 @@ impl FuelType {
             FuelType::Diesel0 => "DIESEL_0",
         }
     }
+
+    pub fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "GASOLINE_92" => Some(FuelType::Gasoline92),
+            "GASOLINE_95" => Some(FuelType::Gasoline95),
+            "GASOLINE_98" => Some(FuelType::Gasoline98),
+            "DIESEL_0" => Some(FuelType::Diesel0),
+            _ => None,
+        }
+    }
 }

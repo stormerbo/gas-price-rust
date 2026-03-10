@@ -4,20 +4,21 @@
 
 ```
 src/
-├── main.rs           # 主入口文件，应用启动和配置
+├── main.rs           # Web 服务器入口
+├── tauri_main.rs     # Tauri 桌面应用入口
+├── lib.rs            # 共享模块与路由配置
 ├── models.rs         # 数据模型定义（结构体、枚举）
 ├── error.rs          # 错误处理（ApiError定义和转换）
-├── database.rs       # 数据库操作（初始化、CRUD）
+├── database.rs       # 数据库操作（初始化、查询、写入）
 ├── crawler.rs        # 爬虫逻辑（爬取、解析、定时任务）
 ├── handlers.rs       # HTTP处理器（API端点实现）
-├── main_backup.rs    # 原始main.rs备份
 └── README.md         # 本文档
 ```
 
 ## 模块说明
 
 ### main.rs
-应用的主入口文件，负责：
+Web 服务器入口文件，负责：
 - 初始化数据库连接
 - 配置应用状态（AppState）
 - 启动自动爬虫
@@ -45,8 +46,8 @@ src/
 - `get_database_path()`: 获取数据库文件路径
 - `init_database()`: 初始化数据库连接和表结构
 - `seed_database()`: 检查是否为首次运行
-- `get_latest_price()`: 查询最新油价
-- `get_today_record()`: 检查当天是否已有记录
+- `load_latest_prices()`: 批量查询最新油价
+- `load_records_on_date()`: 查询指定日期已有记录
 - `insert_price_record()`: 插入新记录
 - `update_price_record()`: 更新现有记录
 - `row_to_record()`: 数据库行转换为结构体
@@ -61,6 +62,7 @@ src/
 - `run_crawl_job()`: 执行完整的爬取任务
 - `start_auto_crawler()`: 启动自动爬虫（定时任务）
 - `env_bool()`: 环境变量读取辅助函数
+- `env_u64()`: 数字型环境变量读取辅助函数
 
 ### handlers.rs
 HTTP处理器模块，包含：
@@ -116,8 +118,14 @@ cargo run
 ## 环境变量
 
 - `AUTO_CRAWLER_ENABLED`: 是否启用自动爬虫（默认: true）
+- `AUTO_CRAWLER_INTERVAL_MINUTES`: 自动爬虫执行间隔（分钟，默认: 720）
 
 ## 数据库位置
 
 - macOS/Linux: `~/.gas_price/data/gas_prices.db`
 - Windows: `C:\Users\<用户名>\.gas_price\data\gas_prices.db`
+### tauri_main.rs
+桌面应用入口文件，负责：
+- 初始化数据库
+- 启动内置 HTTP 服务
+- Tauri 窗口与托盘管理

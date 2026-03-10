@@ -5,12 +5,49 @@ use crate::error::{bad_request, not_found, ApiError};
 use crate::models::*;
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
 use chrono::{Local, NaiveDate};
-use sqlx::Row;
+use sqlx::{QueryBuilder, Sqlite};
 
 /// 解析日期字符串
 fn parse_date(s: &str, field_name: &str) -> Result<NaiveDate, ApiError> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d")
         .map_err(|_| bad_request(&format!("{} 格式错误，应为 YYYY-MM-DD", field_name)))
+}
+
+fn normalized_str(value: &Option<String>) -> Option<&str> {
+    value.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty())
+}
+
+fn sanitize_size(size: usize) -> usize {
+    size.clamp(1, 200)
+}
+
+fn apply_history_filters<'a>(
+    builder: &mut QueryBuilder<'a, Sqlite>,
+    query: &'a HistoryQuery,
+) -> Result<(), ApiError> {
+    if let Some(province) = normalized_str(&query.province) {
+        builder.push(" AND province = ").push_bind(province);
+    }
+
+    if let Some(ref fuel_type) = query.fuel_type {
+        builder
+            .push(" AND fuel_type = ")
+            .push_bind(fuel_type.as_str());
+    }
+
+    if let Some(start_date) = normalized_str(&query.start_date) {
+        parse_date(start_date, "startDate")?;
+        builder
+            .push(" AND effective_date >= ")
+            .push_bind(start_date);
+    }
+
+    if let Some(end_date) = normalized_str(&query.end_date) {
+        parse_date(end_date, "endDate")?;
+        builder.push(" AND effective_date <= ").push_bind(end_date);
+    }
+
+    Ok(())
 }
 
 /// 查询油价历史记录
@@ -19,47 +56,30 @@ pub async fn history(
     data: web::Data<AppState>,
     query: web::Query<HistoryQuery>,
 ) -> Result<impl Responder, ApiError> {
-    let mut sql = String::from("SELECT * FROM gas_prices WHERE 1=1");
-    let mut count_sql = String::from("SELECT COUNT(*) as count FROM gas_prices WHERE 1=1");
+    let size = sanitize_size(query.size);
 
-    if let Some(ref province) = query.province {
-        if !province.trim().is_empty() {
-            sql.push_str(&format!(" AND province = '{}'", province));
-            count_sql.push_str(&format!(" AND province = '{}'", province));
-        }
-    }
+    let mut count_builder =
+        QueryBuilder::<Sqlite>::new("SELECT COUNT(*) as count FROM gas_prices WHERE 1=1");
+    apply_history_filters(&mut count_builder, &query)?;
 
-    if let Some(ref fuel_type) = query.fuel_type {
-        let fuel_str = fuel_type.as_str();
-        sql.push_str(&format!(" AND fuel_type = '{}'", fuel_str));
-        count_sql.push_str(&format!(" AND fuel_type = '{}'", fuel_str));
-    }
-
-    if let Some(ref start_date) = query.start_date {
-        if !start_date.trim().is_empty() {
-            parse_date(start_date, "startDate")?;
-            sql.push_str(&format!(" AND effective_date >= '{}'", start_date));
-            count_sql.push_str(&format!(" AND effective_date >= '{}'", start_date));
-        }
-    }
-
-    if let Some(ref end_date) = query.end_date {
-        if !end_date.trim().is_empty() {
-            parse_date(end_date, "endDate")?;
-            sql.push_str(&format!(" AND effective_date <= '{}'", end_date));
-            count_sql.push_str(&format!(" AND effective_date <= '{}'", end_date));
-        }
-    }
-
-    let total: i64 = sqlx::query(&count_sql)
+    let total: i64 = count_builder
+        .build_query_scalar()
         .fetch_one(&data.db)
-        .await?
-        .try_get("count")?;
-
+        .await?;
     let total_elements = total as usize;
-    let total_pages = (total_elements + query.size - 1) / query.size;
+    let total_pages = if total_elements == 0 {
+        0
+    } else {
+        (total_elements + size - 1) / size
+    };
 
-    sql.push_str(" ORDER BY ");
+    let mut data_builder = QueryBuilder::<Sqlite>::new(
+        "SELECT id, province, fuel_type, price_per_liter, effective_date, price_change \
+         FROM gas_prices WHERE 1=1",
+    );
+    apply_history_filters(&mut data_builder, &query)?;
+
+    data_builder.push(" ORDER BY ");
     let sort_col = match query.sort_by.as_deref() {
         Some("pricePerLiter") => "price_per_liter",
         Some("priceChange") => "price_change",
@@ -71,23 +91,35 @@ pub async fn history(
     };
     // 主排序列 + 次排序保证稳定
     if sort_col == "effective_date" {
-        sql.push_str(&format!("{} {}, id DESC", sort_col, sort_dir));
+        data_builder
+            .push(sort_col)
+            .push(" ")
+            .push(sort_dir)
+            .push(", id DESC");
     } else {
-        sql.push_str(&format!("{} {}, effective_date DESC, id DESC", sort_col, sort_dir));
+        data_builder
+            .push(sort_col)
+            .push(" ")
+            .push(sort_dir)
+            .push(", effective_date DESC, id DESC");
     }
-    sql.push_str(&format!(" LIMIT {} OFFSET {}", query.size, query.page * query.size));
+    data_builder
+        .push(" LIMIT ")
+        .push_bind(size as i64)
+        .push(" OFFSET ")
+        .push_bind((query.page * size) as i64);
 
-    let rows = sqlx::query(&sql).fetch_all(&data.db).await?;
+    let rows = data_builder.build().fetch_all(&data.db).await?;
 
-    let content: Vec<GasPriceRecord> = rows
-        .iter()
-        .filter_map(|row| row_to_record(row).ok())
-        .collect();
+    let mut content = Vec::with_capacity(rows.len());
+    for row in rows {
+        content.push(row_to_record(&row)?);
+    }
 
     Ok(HttpResponse::Ok().json(PagedResponse {
         content,
         page: query.page,
-        size: query.size,
+        size,
         total_elements,
         total_pages,
     }))
@@ -158,7 +190,10 @@ pub async fn update(
 
 /// 删除油价记录
 #[delete("/{id}")]
-pub async fn remove(data: web::Data<AppState>, id: web::Path<u64>) -> Result<impl Responder, ApiError> {
+pub async fn remove(
+    data: web::Data<AppState>,
+    id: web::Path<u64>,
+) -> Result<impl Responder, ApiError> {
     let result = sqlx::query("DELETE FROM gas_prices WHERE id = ?")
         .bind(*id as i64)
         .execute(&data.db)
@@ -183,6 +218,8 @@ pub async fn crawl(
         .map(|p| p.trim().to_string())
         .filter(|p| !p.is_empty());
 
+    let client = build_http_client()?;
+
     let effective_date = match payload.effective_date.as_deref() {
         Some(date) if !date.trim().is_empty() => {
             // 尝试解析用户提供的日期
@@ -190,16 +227,12 @@ pub async fn crawl(
         }
         _ => {
             // 尝试从网站解析调整日期
-            let client = build_http_client()?;
             let resp = client.get("https://www.qiyoujiage.com").send().await?;
             let html = resp.text().await?;
-            
             parse_adjustment_date(&html).unwrap_or_else(|| Local::now().date_naive())
         }
     };
-
     let dry_run = payload.dry_run.unwrap_or(false);
-    let client = build_http_client()?;
 
     let result = run_crawl_job(&data.db, &client, province_filter, effective_date, dry_run).await?;
 

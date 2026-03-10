@@ -3,34 +3,14 @@
  * 可在多个页面复用的油价展示组件
  */
 
-import { getUserProvince } from '../location.js';
-import { API_BASE } from '../constants.js';
-
-const CACHE_KEY = 'user_province_cache';
-const CACHE_EXPIRY_KEY = 'user_province_cache_expiry';
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24小时
-
-/**
- * 清除省份缓存
- */
-function clearProvinceCache() {
-  localStorage.removeItem(CACHE_KEY);
-  localStorage.removeItem(CACHE_EXPIRY_KEY);
-  console.log('✓ 省份缓存已清除');
-}
-
-/**
- * 手动刷新省份
- */
-async function refreshProvince(defaultProvince = '北京') {
-  clearProvinceCache();
-  return await getUserProvince(defaultProvince);
-}
+import { getUserProvince, refreshProvince } from '../location.js';
+import { getApiBase } from '../constants.js';
 
 /**
  * 获取指定省份的最新油价
  */
 async function fetchProvincePrices(province) {
+  const base = await getApiBase();
   const today = new Date();
   const endDate = formatDate(today);
   const startDate = formatDate(new Date(today.getFullYear() - 1, today.getMonth(), today.getDate()));
@@ -43,7 +23,7 @@ async function fetchProvincePrices(province) {
     size: "50",
   });
 
-  const resp = await fetch(`${API_BASE}/history?${query.toString()}`);
+  const resp = await fetch(`${base}/history?${query.toString()}`);
   const data = await resp.json();
 
   if (!resp.ok) {
