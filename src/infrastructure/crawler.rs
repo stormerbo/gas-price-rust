@@ -1,9 +1,9 @@
 // 爬虫模块
-use crate::database::{
+use crate::common::error::{bad_request, internal_error, ApiError};
+use crate::domain::models::{CrawlItem, CrawlResponse, FuelType};
+use crate::infrastructure::db::{
     insert_price_record, load_latest_prices, load_records_on_date, update_price_record,
 };
-use crate::error::{bad_request, internal_error, ApiError};
-use crate::models::{CrawlItem, CrawlResponse, FuelType};
 use chrono::{Datelike, Local, NaiveDate};
 use regex::Regex;
 use reqwest::Client;

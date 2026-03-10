@@ -1,6 +1,6 @@
 // 数据库操作模块
-use crate::error::{internal_error, ApiError};
-use crate::models::{CrawlItem, FuelType, GasPriceRecord};
+use crate::common::error::{internal_error, ApiError};
+use crate::domain::models::{CrawlItem, FuelType, GasPriceRecord};
 use sqlx::{Executor, Row, Sqlite, SqlitePool};
 use std::collections::HashMap;
 

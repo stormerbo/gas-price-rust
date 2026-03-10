@@ -1,8 +1,8 @@
 // API处理器模块
-use crate::crawler::{build_http_client, parse_adjustment_date, run_crawl_job};
-use crate::database::{row_to_record, AppState};
-use crate::error::{bad_request, not_found, ApiError};
-use crate::models::*;
+use crate::common::error::{bad_request, not_found, ApiError};
+use crate::domain::models::*;
+use crate::infrastructure::crawler::{build_http_client, parse_adjustment_date, run_crawl_job};
+use crate::infrastructure::db::{row_to_record, AppState};
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
 use chrono::{Local, NaiveDate};
 use sqlx::{QueryBuilder, Sqlite};
