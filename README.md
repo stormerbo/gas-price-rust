@@ -19,18 +19,24 @@
 
 ## 🚀 快速开始
 
-### 桌面应用（推荐）
+### 桌面应用（开发）
 
 ```bash
-# 一键启动（自动检查端口和配置）
-./run_tauri_app.sh
+# 终端 1：启动后端服务（提供 Web API + 静态资源）
+cargo run
+# 或 npm run backend
+
+# 终端 2：启动 Tauri 桌面应用
+npm install
+npm run tauri:dev
 ```
 
 ### Web 应用
 
 ```bash
 # 启动 Web 服务器
-./run_web.sh
+cargo run
+# 或 npm run backend
 ```
 
 访问: http://127.0.0.1:8080
@@ -38,8 +44,9 @@
 ### 构建桌面应用
 
 ```bash
-# 构建生产版本
-./build_desktop.sh
+# 安装依赖并构建生产版本
+npm install
+npm run tauri:build
 ```
 ```
 
