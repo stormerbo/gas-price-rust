@@ -278,17 +278,39 @@ pub fn env_u64(name: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
+fn duration_until_next_8am(now: chrono::DateTime<Local>) -> Duration {
+    let today_8am = now
+        .date_naive()
+        .and_hms_opt(8, 0, 0)
+        .unwrap()
+        .and_local_timezone(Local)
+        .unwrap();
+
+    let next_8am = if now < today_8am {
+        today_8am
+    } else {
+        (now.date_naive() + chrono::Days::new(1))
+            .and_hms_opt(8, 0, 0)
+            .unwrap()
+            .and_local_timezone(Local)
+            .unwrap()
+    };
+
+    (next_8am - now).to_std().unwrap_or(Duration::from_secs(0))
+}
+
 /// 启动自动爬虫
 pub fn start_auto_crawler(pool: SqlitePool) {
     let enabled = env_bool("AUTO_CRAWLER_ENABLED", true);
     let interval_minutes = env_u64("AUTO_CRAWLER_INTERVAL_MINUTES", 720);
+    let daily_enabled = env_bool("AUTO_CRAWLER_DAILY_8AM_ENABLED", true);
 
     if !enabled {
         println!("[crawler] auto crawler disabled");
         return;
     }
 
-    if interval_minutes == 0 {
+    if !daily_enabled && interval_minutes == 0 {
         println!("[crawler] invalid interval, auto crawler disabled");
         return;
     }
@@ -328,12 +350,20 @@ pub fn start_auto_crawler(pool: SqlitePool) {
         }
 
         loop {
-            println!(
-                "[crawler] next scheduled crawl in {} minutes",
-                interval_minutes
-            );
-
-            tokio::time::sleep(Duration::from_secs(interval_minutes * 60)).await;
+            if daily_enabled {
+                let sleep_for = duration_until_next_8am(Local::now());
+                println!(
+                    "[crawler] next scheduled crawl at 08:00 (in {} hours)",
+                    sleep_for.as_secs() / 3600
+                );
+                tokio::time::sleep(sleep_for).await;
+            } else {
+                println!(
+                    "[crawler] next scheduled crawl in {} minutes",
+                    interval_minutes
+                );
+                tokio::time::sleep(Duration::from_secs(interval_minutes * 60)).await;
+            }
 
             let effective_date = fetch_effective_date(&client).await;
             match run_crawl_job(&pool, &client, None, effective_date, false).await {
