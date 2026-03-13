@@ -78,6 +78,13 @@ export default function ChartPage() {
     gradient.addColorStop(0, 'rgba(0, 113, 227, 0.85)');
     gradient.addColorStop(1, 'rgba(0, 113, 227, 0.65)');
 
+    // 计算 Y 轴范围，从最小值下方开始以突出差异
+    const minValue = data.length ? Math.min(...data) : 0;
+    const maxValue = data.length ? Math.max(...data) : 10;
+    const padding = (maxValue - minValue) * 0.3 || 0.5;
+    const yMin = Math.max(0, Math.floor((minValue - padding) * 10) / 10);
+    const yMax = Math.ceil((maxValue + padding * 0.5) * 10) / 10;
+
     chartInstance.current = new Chart(ctx, {
       type: 'bar',
       data: {
@@ -110,6 +117,8 @@ export default function ChartPage() {
             ticks: { color: '#64748b', maxRotation: 70, minRotation: 45 },
           },
           y: {
+            min: yMin,
+            max: yMax,
             ticks: { color: '#64748b' },
           },
         },
@@ -157,12 +166,6 @@ export default function ChartPage() {
       <section className="card reveal delay-2">
         <div className="section-header">
           <h2>价格分布</h2>
-          <Select
-            value={fuelType}
-            onChange={setFuelType}
-            options={FUEL_TYPES.map((f) => ({ value: f, label: FUEL_TYPE_NAMES[f] }))}
-            style={{ width: 180 }}
-          />
         </div>
         <div className="chart-container" style={{ height: 380 }}>
           <canvas ref={chartRef} />

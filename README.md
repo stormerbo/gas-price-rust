@@ -16,6 +16,7 @@
 - 🤖 自动爬取：定时更新全国油价数据
 - 💾 本地存储：SQLite 数据库，数据安全可靠
 - 🎨 Apple 设计风格：现代化的用户界面
+- 📅 **新增：节假日管理系统** - 自动同步节假日，智能计算调价日期
 
 ## 🚀 快速开始
 
@@ -30,13 +31,35 @@ npm run dev
 npm run tauri:dev
 ```
 
-### Web 应用
+### Web 应用（开发）
+
+```bash
+# 方式1：一键启动前端 + 后端（推荐）
+pnpm install
+pnpm start
+
+# 方式2：分别启动
+# 终端1：启动后端
+cargo run --bin gas-price-web
+
+# 终端2：启动前端
+cd frontend && pnpm run dev
+```
+
+访问: http://localhost:3000
+
+**端口说明：**
+- 前端开发服务器：http://localhost:3000
+- 后端 API 服务：http://localhost:8080
+- 前端已配置代理，自动转发 `/api` 请求到后端
+
+### Web 应用（生产）
 
 ```bash
 # 构建前端并启动 Web 服务器
-npm install
-npm run build
-cargo run --bin gas-price-web
+pnpm install
+pnpm run build
+cargo run --bin gas-price-web --release
 ```
 
 访问: http://127.0.0.1:8080

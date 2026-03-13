@@ -77,6 +77,66 @@ pub async fn init_database(database_url: &str) -> Result<SqlitePool, ApiError> {
     .await
     .map_err(|e| internal_error(&format!("创建索引失败: {}", e)))?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS holidays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            is_off_day INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| internal_error(&format!("创建holidays表失败: {}", e)))?;
+
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_holidays_date ON holidays(date)
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| internal_error(&format!("创建holidays索引失败: {}", e)))?;
+
+    sqlx::query(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_holidays_year ON holidays(year)
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| internal_error(&format!("创建holidays索引失败: {}", e)))?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS adjustment_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            workdays_interval INTEGER NOT NULL DEFAULT 10,
+            first_adjustment_2025 TEXT,
+            first_adjustment_2026 TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| internal_error(&format!("创建adjustment_settings表失败: {}", e)))?;
+
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO adjustment_settings (id, workdays_interval, first_adjustment_2025, first_adjustment_2026)
+        VALUES (1, 10, NULL, '2026-02-24')
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| internal_error(&format!("初始化adjustment_settings失败: {}", e)))?;
+
     Ok(pool)
 }
 

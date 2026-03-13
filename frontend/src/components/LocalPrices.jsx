@@ -26,6 +26,14 @@ function getLatestRecords(records) {
   return latestMap;
 }
 
+function getLatestEffectiveDate(records) {
+  if (!records.length) return null;
+  const sorted = [...records].sort(
+    (a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate)
+  );
+  return sorted[0].effectiveDate;
+}
+
 export default function LocalPrices({
   clickable = false,
   activeType,
@@ -57,8 +65,10 @@ export default function LocalPrices({
         });
 
         const data = await fetchHistory(query);
-        setRecords(data.content || []);
-        setUpdateTime(new Date().toLocaleString());
+        const content = data.content || [];
+        setRecords(content);
+        const latestDate = getLatestEffectiveDate(content);
+        setUpdateTime(latestDate || '-');
       } catch (err) {
         showToast(err.message || '查询失败', 'error');
       } finally {
@@ -94,16 +104,15 @@ export default function LocalPrices({
         <h2 id="local-province-name">{province}油价</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span id="local-update-time" className="update-time">
-            {loading ? '加载中...' : updateTime}
+            {loading ? '加载中...' : `生效日期: ${updateTime}`}
           </span>
           <button
             id="refresh-location-btn"
-            className="btn"
-            style={{ minHeight: 32, padding: '0 12px', fontSize: 13 }}
+            className="btn location-btn"
             title="重新定位"
             onClick={handleRefresh}
           >
-            🔄
+            📍
           </button>
         </div>
       </div>

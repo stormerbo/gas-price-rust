@@ -12,34 +12,6 @@ export async function fetchHistory(query) {
   return data;
 }
 
-export async function deleteRecord(id) {
-  const base = await getApiBase();
-  const resp = await fetch(`${base}/${id}`, { method: 'DELETE' });
-
-  if (!resp.ok) {
-    const err = await resp.json();
-    throw new Error(err.message || '删除失败');
-  }
-
-  return true;
-}
-
-export async function updateRecord(id, payload) {
-  const base = await getApiBase();
-  const resp = await fetch(`${base}/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  const data = await resp.json();
-  if (!resp.ok) {
-    throw new Error(data.message || '调价失败');
-  }
-
-  return data;
-}
-
 export async function triggerCrawl() {
   const base = await getApiBase();
   const controller = new AbortController();
@@ -73,4 +45,73 @@ export async function fetchProvinceHistory(province, startDate, endDate) {
     size: '200',
   });
   return fetchHistory(query);
+}
+
+export async function fetchHolidays(year) {
+  const base = await getApiBase();
+  const url = `${base.replace('/gas-prices', '')}/holidays${year ? `?year=${year}` : ''}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  
+  if (!resp.ok) {
+    throw new Error(data.message || '获取节假日失败');
+  }
+  
+  return data;
+}
+
+export async function syncHolidays() {
+  const base = await getApiBase();
+  const url = `${base.replace('/gas-prices', '')}/holidays/sync`;
+  const resp = await fetch(url, { method: 'POST' });
+  const data = await resp.json();
+  
+  if (!resp.ok) {
+    throw new Error(data.message || '同步节假日失败');
+  }
+  
+  return data;
+}
+
+export async function fetchAdjustmentDates(year) {
+  const base = await getApiBase();
+  const url = `${base.replace('/gas-prices', '')}/holidays/adjustment-dates?year=${year}`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  
+  if (!resp.ok) {
+    throw new Error(data.message || '获取调价日期失败');
+  }
+  
+  return data;
+}
+
+export async function fetchAdjustmentSettings() {
+  const base = await getApiBase();
+  const url = `${base.replace('/gas-prices', '')}/holidays/settings`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  
+  if (!resp.ok) {
+    throw new Error(data.message || '获取配置失败');
+  }
+  
+  return data;
+}
+
+export async function updateAdjustmentSettings(settings) {
+  const base = await getApiBase();
+  const url = `${base.replace('/gas-prices', '')}/holidays/settings`;
+  const resp = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+  const data = await resp.json();
+  
+  if (!resp.ok) {
+    throw new Error(data.message || '更新配置失败');
+  }
+  
+  return data;
 }

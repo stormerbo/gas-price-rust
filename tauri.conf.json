@@ -41,7 +41,7 @@
       "resources": ["static"],
       "copyright": "Copyright © 2026",
       "category": "Utility",
-      "shortDescription": "中国汽油价格管理系统",
+      "shortDescription": "中国油价数据",
       "longDescription": "一个用于查询和管理中国各省份汽油价格的桌面应用程序，支持实时价格查询、历史数据分析和价格趋势可视化。",
       "macOS": {
         "minimumSystemVersion": "10.15",
@@ -69,7 +69,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "中国汽油价格管理",
+        "title": "中国油价数据",
         "width": 1400,
         "height": 900,
         "minWidth": 1000,

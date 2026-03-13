@@ -1,4 +1,3 @@
-// 主入口文件 - Web服务器模式
 use actix_cors::Cors;
 use actix_files::Files;
 use actix_web::{web, App, HttpServer};
@@ -9,7 +8,9 @@ use std::env;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("🚀 启动中国汽油价格管理系统 (Web服务器模式)");
+    dotenvy::dotenv().ok();
+    
+    println!("🚀 启动中国油价数据 (Web服务器模式)");
     println!("💡 提示: 如需桌面应用，请使用 'cargo run --bin gas-price'");
 
     let database_url = get_database_path().expect("Failed to determine database path");

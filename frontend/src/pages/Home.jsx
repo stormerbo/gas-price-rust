@@ -2,18 +2,23 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   DatePicker,
+  Dropdown,
   Form,
-  InputNumber,
-  Modal,
   Select,
+  Space,
   Table,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
+import 'dayjs/locale/zh-cn';
 import LocalPrices from '../components/LocalPrices.jsx';
+import PriceAlert from '../components/PriceAlert.jsx';
 import { PROVINCES, FUEL_TYPE_NAMES, FUEL_TYPES } from '../constants.js';
-import { deleteRecord, fetchHistory, triggerCrawl, updateRecord } from '../api/index.js';
-import { buildQuery, formatPriceChange, mapFuelType, showToast } from '../utils.js';
+import { fetchHistory, triggerCrawl } from '../api/index.js';
+import { buildQuery, formatPriceChange, mapFuelType, showToast, exportToCSV, exportToExcel } from '../utils.js';
+import { lunarCellRender } from '../lunarCell.jsx';
+
+dayjs.locale('zh-cn');
 
 const { Title } = Typography;
 
@@ -23,9 +28,7 @@ export default function HomePage() {
   const [data, setData] = useState([]);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
   const [sorter, setSorter] = useState({ field: 'effectiveDate', order: 'descend' });
-  const [adjustOpen, setAdjustOpen] = useState(false);
-  const [adjustRow, setAdjustRow] = useState(null);
-  const [adjustPrice, setAdjustPrice] = useState(null);
+  const [alertModalVisible, setAlertModalVisible] = useState(false);
 
   const columns = useMemo(
     () => [
@@ -51,30 +54,6 @@ export default function HomePage() {
         sorter: true,
         width: 120,
         render: (value) => formatPriceChange(value),
-      },
-      {
-        title: '操作',
-        key: 'action',
-        width: 160,
-        render: (_, record) => (
-          <div className="row-actions">
-            <button
-              type="button"
-              className="action-link"
-              onClick={() => openAdjust(record)}
-            >
-              调价
-            </button>
-            <span className="action-sep">|</span>
-            <button
-              type="button"
-              className="action-link danger"
-              onClick={() => handleDelete(record)}
-            >
-              删除
-            </button>
-          </div>
-        ),
       },
     ],
     []
@@ -123,7 +102,7 @@ export default function HomePage() {
     form.setFieldsValue({
       fuelType: undefined,
       province: undefined,
-      dates: [dayjs().subtract(30, 'day'), dayjs()],
+      dates: [dayjs().startOf('month'), dayjs().endOf('month')],
     });
     fetchTable(1, pagination.pageSize, sorter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,55 +118,6 @@ export default function HomePage() {
       : sorter;
     setSorter(nextSorter);
     fetchTable(pager.current, pager.pageSize, nextSorter);
-  };
-
-  const handleDelete = (record) => {
-    Modal.confirm({
-      title: '确认删除这条记录吗？',
-      okText: '删除',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
-      async onOk() {
-        try {
-          await deleteRecord(record.id);
-          showToast('删除成功');
-          fetchTable(pagination.current, pagination.pageSize, sorter);
-        } catch (err) {
-          showToast(err.message || '删除失败', 'error');
-        }
-      },
-    });
-  };
-
-  const openAdjust = (record) => {
-    setAdjustRow(record);
-    setAdjustPrice(Number(record.pricePerLiter).toFixed(3));
-    setAdjustOpen(true);
-  };
-
-  const handleAdjustSubmit = async () => {
-    if (!adjustRow) return;
-    const price = Number(adjustPrice);
-    if (!(price > 0)) {
-      showToast('请输入大于 0 的数字', 'error');
-      return;
-    }
-
-    const payload = {
-      province: adjustRow.province,
-      fuelType: adjustRow.fuelType,
-      effectiveDate: adjustRow.effectiveDate,
-      pricePerLiter: price,
-    };
-
-    try {
-      await updateRecord(adjustRow.id, payload);
-      showToast('调价成功');
-      setAdjustOpen(false);
-      fetchTable(pagination.current, pagination.pageSize, sorter);
-    } catch (err) {
-      showToast(err.message || '调价失败', 'error');
-    }
   };
 
   const handleCrawl = async () => {
@@ -211,8 +141,27 @@ export default function HomePage() {
   return (
     <>
       <header className="hero card reveal">
-        <Title level={1}>中国汽油价格管理系统</Title>
-        <p>按省份与油品类型查询历史油价，快速调价与维护记录。</p>
+        <div className="hero-decoration">
+          <span className="fuel-drop"></span>
+          <span className="fuel-drop"></span>
+          <span className="fuel-drop"></span>
+        </div>
+        <Title level={1}>中国油价数据</Title>
+        <p className="hero-subtitle">实时追踪全国 31 省市油价动态，智能分析价格趋势</p>
+        <div className="hero-stats">
+          <div className="hero-stat">
+            <span className="hero-stat-value">31</span>
+            <span className="hero-stat-label">省级行政区</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-value">4</span>
+            <span className="hero-stat-label">油品类型</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-value">24h</span>
+            <span className="hero-stat-label">自动更新</span>
+          </div>
+        </div>
       </header>
 
       <LocalPrices />
@@ -222,37 +171,47 @@ export default function HomePage() {
           <h2>历史记录</h2>
         </div>
 
-        <div className="filters-row">
-          <Form layout="inline" form={form} className="filters" onFinish={handleSearch}>
-          <Form.Item name="province" label="省份">
-            <Select
-              placeholder="全部省份"
-              allowClear
-              style={{ minWidth: 140 }}
-              options={PROVINCES.map((p) => ({ value: p, label: p }))}
-            />
-          </Form.Item>
-          <Form.Item name="fuelType" label="油品">
-            <Select
-              placeholder="全部油品"
-              allowClear
-              style={{ minWidth: 140 }}
-              options={FUEL_TYPES.map((f) => ({ value: f, label: FUEL_TYPE_NAMES[f] }))}
-            />
-          </Form.Item>
-          <Form.Item name="dates" label="日期">
-            <DatePicker.RangePicker format="YYYY-MM-DD" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit">
-              查询
-            </Button>
-          </Form.Item>
+        <div className="history-toolbar">
+          <Form layout="inline" form={form} className="history-filters" onFinish={handleSearch}>
+            <Form.Item name="province">
+              <Select
+                placeholder="全部省份"
+                allowClear
+                showSearch={false}
+                style={{ width: 120 }}
+                options={PROVINCES.map((p) => ({ value: p, label: p }))}
+              />
+            </Form.Item>
+            <Form.Item name="fuelType">
+              <Select
+                placeholder="全部油品"
+                allowClear
+                showSearch={false}
+                style={{ width: 110 }}
+                options={FUEL_TYPES.map((f) => ({ value: f, label: FUEL_TYPE_NAMES[f] }))}
+              />
+            </Form.Item>
+            <Form.Item name="dates">
+              <DatePicker.RangePicker format="YYYY-MM-DD" cellRender={lunarCellRender} />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" htmlType="submit">查询</Button>
+            </Form.Item>
           </Form>
-
-          <Button className="btn primary" onClick={handleCrawl} loading={loading}>
-            爬取最新油价
-          </Button>
+          <Space className="history-actions">
+            <Button onClick={handleCrawl} loading={loading}>检查更新</Button>
+            <Dropdown
+              menu={{
+                items: [
+                  { key: 'csv', label: '导出 CSV', disabled: data.length === 0, onClick: () => exportToCSV(data, '油价数据') },
+                  { key: 'excel', label: '导出 Excel', disabled: data.length === 0, onClick: () => exportToExcel(data, '油价数据') },
+                ],
+              }}
+            >
+              <Button>导出 ▾</Button>
+            </Dropdown>
+            <Button onClick={() => setAlertModalVisible(true)}>🔔 预警</Button>
+          </Space>
         </div>
 
         <Table
@@ -266,25 +225,8 @@ export default function HomePage() {
         />
       </section>
 
+      <PriceAlert visible={alertModalVisible} onClose={() => setAlertModalVisible(false)} />
       <p id="toast" className="toast"></p>
-
-      <Modal
-        title="调价"
-        open={adjustOpen}
-        onOk={handleAdjustSubmit}
-        onCancel={() => setAdjustOpen(false)}
-        okText="保存"
-        cancelText="取消"
-      >
-        <p>输入新的单价（元/升）</p>
-        <InputNumber
-          value={adjustPrice}
-          onChange={(value) => setAdjustPrice(value)}
-          precision={3}
-          min={0}
-          style={{ width: '100%' }}
-        />
-      </Modal>
     </>
   );
 }

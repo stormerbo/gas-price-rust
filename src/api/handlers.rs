@@ -1,13 +1,17 @@
 // API处理器模块
 use crate::common::error::{bad_request, not_found, ApiError};
 use crate::domain::models::*;
+use crate::domain::oil_price::{calculate_next, get_future_adjustment_dates, get_latest_known_adjustment_date, is_workday};
 use crate::infrastructure::crawler::{
     base_url, build_http_client, parse_adjustment_date, run_crawl_job,
 };
 use crate::infrastructure::db::{row_to_record, AppState};
+use crate::infrastructure::holiday_sync;
+use crate::infrastructure::workday_calculator::WorkdayCalculator;
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
-use chrono::{Local, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate};
 use sqlx::{QueryBuilder, Sqlite};
+use std::collections::HashMap;
 
 /// 解析日期字符串
 fn parse_date(s: &str, field_name: &str) -> Result<NaiveDate, ApiError> {
@@ -224,11 +228,9 @@ pub async fn crawl(
 
     let effective_date = match payload.effective_date.as_deref() {
         Some(date) if !date.trim().is_empty() => {
-            // 尝试解析用户提供的日期
             parse_date(date, "effectiveDate")?
         }
         _ => {
-            // 尝试从网站解析调整日期
             let resp = client.get(base_url()).send().await?;
             let html = resp.text().await?;
             parse_adjustment_date(&html).unwrap_or_else(|| Local::now().date_naive())
@@ -239,4 +241,252 @@ pub async fn crawl(
     let result = run_crawl_job(&data.db, &client, province_filter, effective_date, dry_run).await?;
 
     Ok(HttpResponse::Ok().json(result))
+}
+
+/// 高德地图 POI 搜索代理
+#[get("/amap/nearby")]
+pub async fn amap_nearby(
+    query: web::Query<AmapNearbyQuery>,
+) -> Result<impl Responder, ApiError> {
+    let amap_key = std::env::var("AMAP_KEY")
+        .map_err(|_| bad_request("未配置 AMAP_KEY 环境变量"))?;
+
+    let client = build_http_client()?;
+    let url = format!(
+        "https://restapi.amap.com/v3/place/around?key={}&location={}&keywords={}&radius={}&offset={}&output=json",
+        amap_key,
+        query.location,
+        urlencoding::encode(&query.keywords.as_deref().unwrap_or("加油站")),
+        query.radius.unwrap_or(5000),
+        query.limit.unwrap_or(20)
+    );
+
+    let resp = client.get(&url).send().await?;
+    let body = resp.text().await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body))
+}
+
+#[get("/amap/geocode")]
+pub async fn amap_geocode(
+    query: web::Query<AmapGeocodeQuery>,
+) -> Result<impl Responder, ApiError> {
+    let amap_key = std::env::var("AMAP_KEY")
+        .map_err(|_| bad_request("未配置 AMAP_KEY 环境变量"))?;
+
+    let client = build_http_client()?;
+    let url = format!(
+        "https://restapi.amap.com/v3/geocode/geo?key={}&address={}&output=json",
+        amap_key,
+        urlencoding::encode(&query.address)
+    );
+
+    let resp = client.get(&url).send().await?;
+    let body = resp.text().await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body))
+}
+
+#[get("/amap/reverse-geocode")]
+pub async fn amap_reverse_geocode(
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl Responder, ApiError> {
+    let amap_key = std::env::var("AMAP_KEY")
+        .map_err(|_| bad_request("未配置 AMAP_KEY 环境变量"))?;
+
+    let location = query.get("location")
+        .ok_or_else(|| bad_request("缺少 location 参数"))?;
+
+    let client = build_http_client()?;
+    let url = format!(
+        "https://restapi.amap.com/v3/geocode/regeo?key={}&location={}&output=json",
+        amap_key,
+        location
+    );
+
+    let resp = client.get(&url).send().await?;
+    let body = resp.text().await?;
+
+    Ok(HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body))
+}
+
+/// 获取下次油价调整日期
+#[get("/next-adjustment")]
+pub async fn get_next_adjustment() -> impl Responder {
+    let next_date = calculate_next();
+    let today = Local::now().date_naive();
+    let days_until = (next_date - today).num_days();
+    let is_adjustment_day = is_workday(next_date);
+
+    HttpResponse::Ok().json(NextAdjustmentResponse {
+        next_date: next_date.format("%Y-%m-%d").to_string(),
+        days_until,
+        is_adjustment_day,
+    })
+}
+
+/// 获取未来调价日历
+#[get("/adjustment-calendar")]
+pub async fn get_adjustment_calendar() -> impl Responder {
+    let latest = get_latest_known_adjustment_date();
+    let future_dates = get_future_adjustment_dates(latest, 12);
+
+    let calendar: Vec<AdjustmentCalendarItem> = future_dates
+        .iter()
+        .enumerate()
+        .map(|(i, date)| AdjustmentCalendarItem {
+            date: date.format("%Y-%m-%d").to_string(),
+            round: (i + 1) as u32,
+        })
+        .collect();
+
+    HttpResponse::Ok().json(serde_json::json!({
+        "latestKnownDate": latest.format("%Y-%m-%d").to_string(),
+        "calendar": calendar
+    }))
+}
+
+#[get("/holidays")]
+pub async fn get_holidays(
+    query: web::Query<HashMap<String, String>>,
+    data: web::Data<AppState>,
+) -> Result<impl Responder, ApiError> {
+    let year = query
+        .get("year")
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or_else(|| Local::now().year());
+
+    let rows = sqlx::query_as::<_, Holiday>(
+        "SELECT id, date, name, is_off_day, year FROM holidays WHERE year = ? ORDER BY date",
+    )
+    .bind(year)
+    .fetch_all(&data.db)
+    .await?;
+
+    Ok(HttpResponse::Ok().json(rows))
+}
+
+#[post("/holidays/sync")]
+pub async fn sync_holidays(data: web::Data<AppState>) -> Result<impl Responder, ApiError> {
+    let current_year = Local::now().year();
+    let years = vec![current_year - 1, current_year, current_year + 1];
+
+    let response = holiday_sync::sync_holidays_from_github(&data.db, years).await?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+#[get("/holidays/adjustment-dates")]
+pub async fn get_adjustment_dates(
+    query: web::Query<HashMap<String, String>>,
+    data: web::Data<AppState>,
+) -> Result<impl Responder, ApiError> {
+    let year = query
+        .get("year")
+        .and_then(|s| s.parse::<i32>().ok())
+        .ok_or_else(|| bad_request("year参数必须提供"))?;
+
+    let settings = sqlx::query_as::<_, AdjustmentSettings>(
+        "SELECT workdays_interval, first_adjustment_2025, first_adjustment_2026 FROM adjustment_settings WHERE id = 1"
+    )
+    .fetch_one(&data.db)
+    .await?;
+
+    let first_date = match year {
+        2025 => settings.first_adjustment_2025,
+        2026 => settings.first_adjustment_2026,
+        _ => None,
+    }
+    .ok_or_else(|| bad_request(&format!("未配置{}年的首次调价日期", year)))?;
+
+    let dates = WorkdayCalculator::generate_adjustment_dates(
+        &data.db,
+        year,
+        &first_date,
+        settings.workdays_interval,
+    )
+    .await?;
+
+    Ok(HttpResponse::Ok().json(dates))
+}
+
+#[get("/holidays/next-adjustment")]
+pub async fn get_next_adjustment_v2(data: web::Data<AppState>) -> Result<impl Responder, ApiError> {
+    let today = Local::now().naive_local().date();
+    let year = today.year();
+
+    let settings = sqlx::query_as::<_, AdjustmentSettings>(
+        "SELECT workdays_interval, first_adjustment_2025, first_adjustment_2026 FROM adjustment_settings WHERE id = 1"
+    )
+    .fetch_one(&data.db)
+    .await?;
+
+    let first_date = match year {
+        2025 => settings.first_adjustment_2025,
+        2026 => settings.first_adjustment_2026,
+        _ => None,
+    }
+    .ok_or_else(|| bad_request(&format!("未配置{}年的首次调价日期", year)))?;
+
+    let dates = WorkdayCalculator::generate_adjustment_dates(
+        &data.db,
+        year,
+        &first_date,
+        settings.workdays_interval,
+    )
+    .await?;
+
+    let next = dates
+        .into_iter()
+        .find(|d| {
+            NaiveDate::parse_from_str(&d.date, "%Y-%m-%d")
+                .map(|date| date > today)
+                .unwrap_or(false)
+        })
+        .ok_or_else(|| not_found("未找到下次调价日期"))?;
+
+    Ok(HttpResponse::Ok().json(next))
+}
+
+#[get("/holidays/settings")]
+pub async fn get_adjustment_settings(
+    data: web::Data<AppState>,
+) -> Result<impl Responder, ApiError> {
+    let settings = sqlx::query_as::<_, AdjustmentSettings>(
+        "SELECT workdays_interval, first_adjustment_2025, first_adjustment_2026 FROM adjustment_settings WHERE id = 1"
+    )
+    .fetch_one(&data.db)
+    .await?;
+
+    Ok(HttpResponse::Ok().json(settings))
+}
+
+#[put("/holidays/settings")]
+pub async fn update_adjustment_settings(
+    data: web::Data<AppState>,
+    payload: web::Json<AdjustmentSettings>,
+) -> Result<impl Responder, ApiError> {
+    sqlx::query(
+        r#"
+        UPDATE adjustment_settings 
+        SET workdays_interval = ?, first_adjustment_2025 = ?, first_adjustment_2026 = ?,
+            updated_at = datetime('now', 'localtime')
+        WHERE id = 1
+        "#,
+    )
+    .bind(payload.workdays_interval)
+    .bind(&payload.first_adjustment_2025)
+    .bind(&payload.first_adjustment_2026)
+    .execute(&data.db)
+    .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "message": "配置已更新"
+    })))
 }

@@ -36,3 +36,95 @@ export function buildQuery({ province, fuelType, dates, page, size, sortBy, sort
   if (sortDir) query.set('sortDir', sortDir);
   return query;
 }
+
+/**
+ * 导出数据为 CSV 文件
+ * @param {Array} data - 数据数组
+ * @param {string} filename - 文件名（不含扩展名）
+ */
+export function exportToCSV(data, filename = 'export') {
+  if (!data || data.length === 0) {
+    showToast('没有数据可导出', 'error');
+    return;
+  }
+
+  const headers = ['ID', '省份', '油品', '生效日期', '单价(元/L)', '涨跌'];
+  const rows = data.map((row) => [
+    row.id,
+    row.province,
+    mapFuelType(row.fuelType),
+    row.effectiveDate,
+    Number(row.pricePerLiter).toFixed(3),
+    row.priceChange != null ? Number(row.priceChange).toFixed(3) : '',
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+  ].join('\n');
+
+  // 添加 BOM 以支持 Excel 正确显示中文
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  showToast(`已导出 ${data.length} 条数据`);
+}
+
+/**
+ * 导出数据为 Excel 文件 (使用简单的 XML 格式)
+ * @param {Array} data - 数据数组
+ * @param {string} filename - 文件名（不含扩展名）
+ */
+export function exportToExcel(data, filename = 'export') {
+  if (!data || data.length === 0) {
+    showToast('没有数据可导出', 'error');
+    return;
+  }
+
+  const headers = ['ID', '省份', '油品', '生效日期', '单价(元/L)', '涨跌'];
+  const rows = data.map((row) => [
+    row.id,
+    row.province,
+    mapFuelType(row.fuelType),
+    row.effectiveDate,
+    Number(row.pricePerLiter).toFixed(3),
+    row.priceChange != null ? Number(row.priceChange).toFixed(3) : '',
+  ]);
+
+  // 构建简单的 HTML 表格，Excel 可以直接打开
+  let tableHtml = '<table border="1">';
+  tableHtml += '<tr>' + headers.map((h) => `<th>${h}</th>`).join('') + '</tr>';
+  rows.forEach((row) => {
+    tableHtml += '<tr>' + row.map((cell) => `<td>${cell}</td>`).join('') + '</tr>';
+  });
+  tableHtml += '</table>';
+
+  const htmlContent = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+    <head><meta charset="UTF-8"></head>
+    <body>${tableHtml}</body>
+    </html>
+  `;
+
+  const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  showToast(`已导出 ${data.length} 条数据`);
+}

@@ -97,6 +97,19 @@ pub struct CrawlItem {
     pub effective_date: NaiveDate,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AmapNearbyQuery {
+    pub location: String,
+    pub keywords: Option<String>,
+    pub radius: Option<u32>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AmapGeocodeQuery {
+    pub address: String,
+}
+
 impl FuelType {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -116,4 +129,52 @@ impl FuelType {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NextAdjustmentResponse {
+    pub next_date: String,
+    pub days_until: i64,
+    pub is_adjustment_day: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdjustmentCalendarItem {
+    pub date: String,
+    pub round: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct Holiday {
+    pub id: Option<i64>,
+    pub date: String,
+    pub name: String,
+    pub is_off_day: bool,
+    pub year: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AdjustmentSettings {
+    pub workdays_interval: i32,
+    pub first_adjustment_2025: Option<String>,
+    pub first_adjustment_2026: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdjustmentDate {
+    pub date: String,
+    pub sequence: i32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncResponse {
+    pub synced_years: Vec<i32>,
+    pub total_records: usize,
+    pub message: String,
 }
